@@ -31,6 +31,40 @@
     }")
 
 (def my-color (js/Float32Array. [1.0 1.0 1.0 1.0]))
+(def color-white (js/Float32Array. [1.0 1.0 1.0 1.0]))
+
+(defn is-power-of-2 [value]
+  (= (bit-and value (dec value)) 0))
+
+(defn load-texture [gl url]
+  (let [texture (.createTexture gl)]
+    (.bindTexture gl (.-TEXTURE_2D gl) texture)
+
+    (let [level 0
+          internal-format (.-RGBA gl)
+          width 1
+          height 1
+          border 0
+          src-format (.-RGBA gl)
+          src-type (.-UNSIGNED_BYTE gl)
+          pixel (js/Uint8Array. #js[0 0 255 255])
+          image (js/Image.)]
+      (.texImage2D gl (.-TEXTURE_2D gl) level internal-format width
+                   height border src-format src-type pixel)
+      (set! (.-onload image)
+            (fn []
+              (.bindTexture gl (.-TEXTURE_2D gl) texture)
+              (.texImage2D gl (.-TEXTURE_2D gl) level internal-format
+                           src-format src-type image)
+              (if (and (is-power-of-2 (.-width image))
+                       (is-power-of-2 (.-height image)))
+                (.generateMipmap gl (.-TEXTURE_2D gl))
+                (do
+                  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
+                  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
+                  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-LINEAR gl))))))
+      (set! (.-src image) url))
+    texture))
 
 (defn load-shader [gl type source]
   (let [shader (.createShader gl type)]
@@ -132,7 +166,9 @@
                             offset)
       (.enableVertexAttribArray gl (-> program-info :attrib-locations :texture-coord)))
 
-    (.uniform4fv gl (-> program-info :uniform-locations :u-color) color)
+    (if color
+      (.uniform4fv gl (-> program-info :uniform-locations :u-color) color)
+      (.uniform4fv gl (-> program-info :uniform-locations :u-color) color-white))
 
     (.activeTexture gl (.-TEXTURE0 gl))
     (.bindTexture gl (.-TEXTURE_2D gl) texture)
@@ -141,6 +177,17 @@
     (let [offset 0
           vertex-count 4]
       (.drawArrays gl (.-TRIANGLE_STRIP gl) offset vertex-count))))
+
+(defn draw-text [text]
+  (let [canvas      (.querySelector js/document "#textCanvas")
+        ctx         (.getContext canvas "2d")
+        width       (.-width (.measureText ctx text))]
+    (.clearRect ctx 0 0 (.-width canvas) (.-height canvas))
+    (set! (.-font ctx) "20px Verdana")
+    (set! (.-fillStyle ctx) "white")
+    (set! (.-textAlign ctx) "center")
+    (set! (.-textBaseline ctx) "middle")
+    (.fillText ctx text 500 40)))
 
 (defn init-buffers [gl]
   (let [position-buffer (.createBuffer gl)
@@ -195,40 +242,9 @@
                      :origin {:x 180 :y 40}
                      :effect {:type :flip}
                      :color my-color})
+
+    (draw-text "Some text")
 ))
-
-(defn is-power-of-2 [value]
-  (= (bit-and value (dec value)) 0))
-
-(defn load-texture [gl url]
-  (let [texture (.createTexture gl)]
-    (.bindTexture gl (.-TEXTURE_2D gl) texture)
-
-    (let [level 0
-          internal-format (.-RGBA gl)
-          width 1
-          height 1
-          border 0
-          src-format (.-RGBA gl)
-          src-type (.-UNSIGNED_BYTE gl)
-          pixel (js/Uint8Array. #js[0 0 255 255])
-          image (js/Image.)]
-      (.texImage2D gl (.-TEXTURE_2D gl) level internal-format width
-                   height border src-format src-type pixel)
-      (set! (.-onload image)
-            (fn []
-              (.bindTexture gl (.-TEXTURE_2D gl) texture)
-              (.texImage2D gl (.-TEXTURE_2D gl) level internal-format
-                           src-format src-type image)
-              (if (and (is-power-of-2 (.-width image))
-                       (is-power-of-2 (.-height image)))
-                (.generateMipmap gl (.-TEXTURE_2D gl))
-                (do
-                  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
-                  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
-                  (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-LINEAR gl))))))
-      (set! (.-src image) url))
-    texture))
 
 (def context  (atom nil))
 
