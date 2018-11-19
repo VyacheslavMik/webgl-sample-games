@@ -9,6 +9,10 @@
 (defn color [v]
   (js/Float32Array. v))
 
+(defn tex-coords [tex-width tex-height {:keys [x y w h]}]
+  (let []
+    ))
+
 (def vs-source "
     attribute vec4 aVertexPosition;
     attribute vec2 aTextureCoord;
@@ -33,6 +37,7 @@
 
     void main() {
       gl_FragColor = texture2D(uSampler, vTextureCoord) * uColor;
+      gl_FragColor.rgb *= gl_FragColor.a;
     }")
 
 (defn is-power-of-2 [value]
@@ -56,6 +61,8 @@
                      height border src-format src-type pixel)
         (set! (.-onload image)
               (fn []
+                (swap! context assoc-in [:textures texture] {:width (.-width image)
+                                                             :height (.-height image)})
                 (.bindTexture gl (.-TEXTURE_2D gl) texture)
                 (.texImage2D gl (.-TEXTURE_2D gl) level internal-format
                              src-format src-type image)
@@ -97,18 +104,30 @@
               (.getProgramInfoLog gl shader-program)))
         nil))))
 
-(defn draw-rectangle [{:keys [color effect origin size texture]}]
-  (when-let [{buffers :buffers gl :gl program-info :program-info} @context]
+(defn draw-rectangle [{:keys [color effect origin size texture tex-coords]}]
+  (when-let [{:keys [buffers gl program-info textures]} @context]
     (let [half-height (/ (:height size) 2)
           half-width  (/ (:width size) 2)
           positions [   half-width     half-height
                      (- half-width)    half-height
                      half-width  (- half-height)
                      (- half-width) (- half-height)]
-          texture-coordinates [1.0  1.0
-                               0.0  1.0
-                               1.0  0.0
-                               0.0  0.0]
+          tex-size (get textures texture)
+          texture-coordinates (if (and tex-coords tex-size)
+                                (let [{:keys [x y w h]} tex-coords
+                                      {:keys [width height]} tex-size
+                                      x2 (/ (+ x w) width)
+                                      y2 (/ (+ y h) height)
+                                      x1 (/ x width)
+                                      y1 (/ y height)]
+                                  [x2 y2
+                                   x1 y2
+                                   x2 y1
+                                   x1 y1])
+                                [1.0  1.0
+                                 0.0  1.0
+                                 1.0  0.0
+                                 0.0  0.0])
           model-view-matrix (.create js/mat4)]
 
       (.translate js/mat4 model-view-matrix model-view-matrix #js[(:x origin) (:y origin) 0.0])
@@ -203,8 +222,9 @@
   (when-let [{:keys [gl program-info buffers texture projection-matrix draw-fn] :as ctx} @context]
     (.clearColor gl 0.0 0.0 0.0 1.0)
     (.clearDepth gl 1.0)
-    (.enable     gl (.-DEPTH_TEST gl))
-    (.depthFunc  gl (.-LEQUAL gl))
+    (.enable     gl (.-BLEND gl))
+
+    (.blendFunc gl (.-SRC_ALPHA gl) (.-ONE_MINUS_SRC_ALPHA gl))
 
     (.clear gl (bit-or (.-COLOR_BUFFER_BIT gl) (.-DEPTH_BUFFER_BIT gl)))
     (.clearRect (:text-context ctx) 0 0 (.-width (:text-canvas ctx)) (.-height (:text-canvas ctx)))
@@ -228,7 +248,8 @@
 
 (defn init [& [props]]
   (let [gl-canvas    (.querySelector js/document "#glCanvas")
-        gl           (.getContext gl-canvas "webgl")
+        gl           (.getContext gl-canvas "webgl" #js{:premultipliedAlpha false
+                                                        :alpha              false})
         text-canvas  (.querySelector js/document "#textCanvas")
         text-context (.getContext text-canvas "2d")]
     (if (nil? gl)
@@ -266,9 +287,8 @@
 
 (defn render [now]
   (when-let [{:keys [update-fn]} @context]
-    (let [now (* now 0.001)]
       (reset! delta-time (- now @then))
-      (reset! then now))
+      (reset! then now)
     (when update-fn
       (update-fn))
     (draw)
