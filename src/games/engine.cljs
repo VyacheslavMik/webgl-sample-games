@@ -1,6 +1,6 @@
 (ns games.engine)
 
-(def context         (atom {}))
+(def context         (atom nil))
 (def then            (atom 0))
 (def delta-time      (atom 0))
 
@@ -104,15 +104,19 @@
               (.getProgramInfoLog gl shader-program)))
         nil))))
 
-(defn draw-rectangle [{:keys [color effect origin size texture tex-coords]}]
+(defn draw-rectangle [{:keys [color effect origin position size texture tex-coords]}]
   (when-let [{:keys [buffers gl program-info textures]} @context]
-    (let [half-height (/ (:height size) 2)
+    (let [tex-size (get textures texture)
+          size (or size
+                   (and tex-coords {:width (:w tex-coords)
+                                    :height (:h tex-coords)})
+                   tex-size)
+          half-height (/ (:height size) 2)
           half-width  (/ (:width size) 2)
           positions [   half-width     half-height
                      (- half-width)    half-height
                      half-width  (- half-height)
                      (- half-width) (- half-height)]
-          tex-size (get textures texture)
           texture-coordinates (if (and tex-coords tex-size)
                                 (let [{:keys [x y w h]} tex-coords
                                       {:keys [width height]} tex-size
@@ -130,7 +134,16 @@
                                  0.0  0.0])
           model-view-matrix (.create js/mat4)]
 
-      (.translate js/mat4 model-view-matrix model-view-matrix #js[(:x origin) (:y origin) 0.0])
+      (let [[x y] (cond
+                    origin
+                    [(:x origin) (:y origin)]
+
+                    position
+                    [(+ (:x position) half-width) (+ (:y position) half-height)]
+
+                    :else
+                    [half-width half-height])]
+        (.translate js/mat4 model-view-matrix model-view-matrix #js[x y 0.0]))
 
       (case (:type effect)
         :rotate
@@ -238,13 +251,33 @@
     (when draw-fn
       (draw-fn))))
 
-(defn handle-mouse-double-click [ev]
-  (.log js/console "double click" ev)
-  )
-
 (defn handle-mouse-click [ev]
   (.log js/console "click" ev)
   )
+
+(defn handle-key-down [ev]
+  (swap! context update :pressed-keys conj (keyword (.-code ev))))
+
+(defn handle-key-up [ev]
+  (swap! context update :pressed-keys disj (keyword (.-code ev))))
+
+(defn handle-context-menu [ev]
+  (.log js/console "click" ev)
+  (.preventDefault ev))
+
+(defn key-pressed? [k]
+  (get (:pressed-keys @context) k))
+
+(defn register-events [text-canvas]
+  (.removeEventListener text-canvas "contextmenu" handle-context-menu)
+  (.removeEventListener text-canvas "click"       handle-mouse-click)
+  (.removeEventListener text-canvas "keydown"     handle-key-down)
+  (.removeEventListener text-canvas "keyup"       handle-key-up)
+
+  (.addEventListener    text-canvas "contextmenu" handle-context-menu)
+  (.addEventListener    text-canvas "click"       handle-mouse-click)
+  (.addEventListener    text-canvas "keydown"     handle-key-down)
+  (.addEventListener    text-canvas "keyup"       handle-key-up))
 
 (defn init [& [props]]
   (let [gl-canvas    (.querySelector js/document "#glCanvas")
@@ -270,8 +303,8 @@
                                               :u-color           u-color}}
             buffers (init-buffers gl)
             projection-matrix (.create js/mat4)]
-        (.addEventListener text-canvas "contextmenu" (fn [ev] (.preventDefault ev)))
-        (.addEventListener text-canvas "click"       handle-mouse-click)
+        (register-events text-canvas)
+        (.focus text-canvas)
         (reset! context {:gl-canvas    gl-canvas
                          :gl           gl
                          :text-canvas  text-canvas
@@ -282,6 +315,7 @@
                          :projection-matrix projection-matrix
                          :program-info      program-info
                          :buffers           buffers
+                         :pressed-keys      #{}
                          :update-fn         (:update-fn props)
                          :draw-fn           (:draw-fn props)})))))
 
