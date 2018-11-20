@@ -251,10 +251,6 @@
     (when draw-fn
       (draw-fn))))
 
-(defn handle-mouse-click [ev]
-  (.log js/console "click" ev)
-  )
-
 (defn handle-key-down [ev]
   (swap! context update :pressed-keys conj (keyword (.-code ev))))
 
@@ -262,22 +258,35 @@
   (swap! context update :pressed-keys disj (keyword (.-code ev))))
 
 (defn handle-context-menu [ev]
-  (.log js/console "click" ev)
   (.preventDefault ev))
+
+(defn handle-mouse-down [ev]
+  (let [button ({0 :left 2 :right} (.-button ev))]
+    (swap! context assoc :mouse-state {:button button
+                                       :x (.-offsetX ev)
+                                       :y (.-offsetY ev)})))
+
+(defn handle-mouse-up [ev]
+  (swap! context assoc :mouse-state nil))
 
 (defn key-pressed? [k]
   (get (:pressed-keys @context) k))
 
+(defn get-mouse-state []
+  (:mouse-state @context))
+
 (defn register-events [text-canvas]
   (.removeEventListener text-canvas "contextmenu" handle-context-menu)
-  (.removeEventListener text-canvas "click"       handle-mouse-click)
   (.removeEventListener text-canvas "keydown"     handle-key-down)
   (.removeEventListener text-canvas "keyup"       handle-key-up)
+  (.removeEventListener text-canvas "mousedown"   handle-mouse-down)
+  (.removeEventListener text-canvas "mouseup"     handle-mouse-up)
 
   (.addEventListener    text-canvas "contextmenu" handle-context-menu)
-  (.addEventListener    text-canvas "click"       handle-mouse-click)
   (.addEventListener    text-canvas "keydown"     handle-key-down)
-  (.addEventListener    text-canvas "keyup"       handle-key-up))
+  (.addEventListener    text-canvas "keyup"       handle-key-up)
+  (.addEventListener    text-canvas "mousedown"   handle-mouse-down)
+  (.addEventListener    text-canvas "mouseup"     handle-mouse-up))
 
 (defn init [& [props]]
   (let [gl-canvas    (.querySelector js/document "#glCanvas")
@@ -316,6 +325,7 @@
                          :program-info      program-info
                          :buffers           buffers
                          :pressed-keys      #{}
+                         :mouse-state       nil
                          :update-fn         (:update-fn props)
                          :draw-fn           (:draw-fn props)})))))
 
