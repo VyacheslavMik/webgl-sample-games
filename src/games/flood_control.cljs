@@ -1,5 +1,6 @@
 (ns games.flood-control
-  (:require [games.engine :as engine]))
+  (:require [games.engine :as engine]
+            [clojure.string :as str]))
 
 (def context (atom {:state :title-screen
                     :board []
@@ -123,6 +124,46 @@
       nil))
   )
 
+(defn has-connector? [x y from]
+  (str/includes? (name (get-in @context [:board x y :piece-type])) from))
+
+(defn not-filled? [x y]
+  (not (get-in @context [:board x y :suffixes :w])))
+
+(defn fill-piece [x y]
+  (swap! context update-in [:board x y :suffixes] conj :w))
+
+(defn get-other-end [x y from]
+  (-> @context
+      (get-in [:board x y :piece-type])
+      (name)
+      (str/replace from "")
+      (str/replace "-" "")))
+
+(defn propagate-water [x y from]
+  (when (and (>= y 0) (< y board-height)
+             (>= x 0) (< x board-width)
+             (has-connector? x y from)
+             (not-filled? x y))
+    (fill-piece x y)
+
+    (case (get-other-end x y from)
+      "left"   (propagate-water (dec x) y "right")
+      "right"  (propagate-water (inc x) y "left")
+      "top"    (propagate-water x (dec y) "bottom")
+      "bottom" (propagate-water x (inc y) "top")
+
+      nil)))
+
+(defn get-water-chain [y]
+  (propagate-water 0 y "left")
+  )
+
+(defn reset-water []
+  (doseq [x (range board-width)]
+    (doseq [y (range board-height)]
+      (swap! context update-in [:board x y :suffixes] disj :w))))
+
 (defn are-pieces-animating? []
   (not (empty? (:falling-pieces @context))))
 
@@ -132,8 +173,8 @@
 (defn update-falling-pieces [delta]
   (doseq [k (keys (:falling-pieces @context))]
     (update-falling-piece k delta)
-    (when (= (get-in @context [:falling-pieces k]) 0)
-      (swap! @context update :falling-pieces dissoc k))))
+    (when (= (get-in @context [:falling-pieces k :v-offset]) 0)
+      (swap! context update :falling-pieces dissoc k))))
 
 (defn update-animated-pieces [delta]
   (update-falling-pieces delta))
@@ -153,6 +194,9 @@
         (if (are-pieces-animating?)
           (update-animated-pieces delta)
           (do
+            (reset-water)
+            (doseq [y (range board-height)]
+              (get-water-chain y))
             )))
 
       nil))
