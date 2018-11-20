@@ -126,19 +126,19 @@
 (defn are-pieces-animating? []
   (not (empty? (:falling-pieces @context))))
 
-(defn update-falling-piece [k]
+(defn update-falling-piece [k delta]
   (swap! context update-in [:falling-pieces k :v-offset] (fn [v] (max 0 (- v fall-rate)))))
 
-(defn update-falling-pieces []
+(defn update-falling-pieces [delta]
   (doseq [k (keys (:falling-pieces @context))]
-    (update-falling-piece k)
+    (update-falling-piece k delta)
     (when (= (get-in @context [:falling-pieces k]) 0)
       (swap! @context update :falling-pieces dissoc k))))
 
-(defn update-animated-pieces []
-  (update-falling-pieces))
+(defn update-animated-pieces [delta]
+  (update-falling-pieces delta))
 
-(defn update* []
+(defn update* [delta]
   (let [{:keys [state]} @context]
     (case state
       :title-screen
@@ -151,7 +151,7 @@
       :playing
       (do
         (if (are-pieces-animating?)
-          (update-animated-pieces)
+          (update-animated-pieces delta)
           (do
             )))
 

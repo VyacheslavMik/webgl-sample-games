@@ -2,7 +2,6 @@
 
 (def context         (atom nil))
 (def then            (atom 0))
-(def delta-time      (atom 0))
 
 (def color-white (js/Float32Array. [1.0 1.0 1.0 1.0]))
 
@@ -331,12 +330,11 @@
 
 (defn render [now]
   (when-let [{:keys [update-fn]} @context]
-      (reset! delta-time (- now @then))
+    (let [delta (- now @then)]
       (reset! then now)
-    (when update-fn
-      (update-fn))
-    (draw)
-    (js/requestAnimationFrame render)))
+      (when update-fn (update-fn delta))
+      (draw)
+      (js/requestAnimationFrame render))))
 
 (defn run []
   (js/requestAnimationFrame render))

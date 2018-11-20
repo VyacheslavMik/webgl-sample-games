@@ -1,1 +1,1 @@
-clj --main cljs.main --compile games.core --repl
+clojure -R:dev build.clj figwheel
