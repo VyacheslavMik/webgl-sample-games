@@ -16,7 +16,7 @@
 (def empty-piece {:piece-type :empty
                   :suffixes #{}})
 
-(def min-time-since-last-input 0.25)
+(def min-time-since-last-input 0.4)
 
 (def texture-offset-x 1)
 (def texture-offset-y 1)
@@ -35,6 +35,7 @@
 (def game-board-display-position-y 89)
 
 (def fall-rate 5)
+(def rotation-rate 9)
 
 (defn new-board []
   (swap! context assoc :board
@@ -89,7 +90,7 @@
    :w piece-width
    :h piece-height})
 
-(defn draw-board [{:keys [textures board falling-pieces]}]
+(defn draw-board [{:keys [textures board falling-pieces rotating-pieces]}]
   (doseq [x (range board-width)]
     (doseq [y (range board-height)]
       (let [px (+ game-board-display-position-x (* x piece-width))
@@ -104,6 +105,17 @@
             (engine/draw-rectangle
              {:texture (:tile-sheet textures)
               :position {:x px :y (- py (:v-offset piece))}
+              :tex-coords (get-source-rect piece)}))
+
+          (get rotating-pieces {:x x :y y})
+          (let [piece (get rotating-pieces {:x x :y y})]
+            (engine/draw-rectangle
+             {:texture (:tile-sheet textures)
+              :position {:x px :y py}
+              :effect {:type :rotate
+                       :angle (if (:clockwise? piece)
+                                (- 90 (:rotation-amount piece))
+                                (:rotation-amount piece))}
               :tex-coords (get-source-rect piece)}))
 
           :else
@@ -168,7 +180,9 @@
       (swap! context update-in [:board x y :suffixes] disj :w))))
 
 (defn are-pieces-animating? []
-  (not (empty? (:falling-pieces @context))))
+  (or
+   (not (empty? (:falling-pieces @context)))
+   (not (empty? (:rotating-pieces @context)))))
 
 (defn update-falling-piece [k delta]
   (swap! context update-in [:falling-pieces k :v-offset] (fn [v] (max 0 (- v fall-rate)))))
@@ -179,8 +193,20 @@
     (when (= (get-in @context [:falling-pieces k :v-offset]) 0)
       (swap! context update :falling-pieces dissoc k))))
 
+(defn update-rotating-piece [k delta]
+  (swap! context update-in [:rotating-pieces k :rotation-amount] + rotation-rate)
+  (swap! context update-in [:rotating-pieces k :rotation-ticks-remaining]
+         (fn [v] (max 0 (dec v)))))
+
+(defn update-rotating-pieces [delta]
+  (doseq [k (keys (:rotating-pieces @context))]
+    (update-rotating-piece k delta)
+    (when (= (get-in @context [:rotating-pieces k :rotation-ticks-remaining]) 0)
+      (swap! context update :rotating-pieces dissoc k))))
+
 (defn update-animated-pieces [delta]
-  (update-falling-pieces delta))
+  (update-falling-pieces delta)
+  (update-rotating-pieces delta))
 
 (defn locked? [x y]
   (get-in @context [:board x y :suffixes :l]))
@@ -193,6 +219,8 @@
       (swap! context assoc-in [:rotating-pieces {:x x :y y}]
              {:piece-type piece-type
               :clockwise? clockwise?
+              :rotation-ticks-remaining 10
+              :rotation-amount 0
               :suffixes (cond-> #{} suffix (conj suffix))}))))
 
 (defn rotate-piece [x y clockwise?]
@@ -272,7 +300,9 @@
   (str "textures/flood_control/" tex-name))
 
 (defn run []
-  (engine/init {:draw-fn draw* :update-fn update*})
+  (engine/init {:draw-fn   draw*
+                :update-fn update*
+                :show-fps? true})
 
   (swap! context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
   (swap! context assoc-in [:textures :background]   (engine/load-texture (texture "background.png")))

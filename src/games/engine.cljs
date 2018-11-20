@@ -8,10 +8,6 @@
 (defn color [v]
   (js/Float32Array. v))
 
-(defn tex-coords [tex-width tex-height {:keys [x y w h]}]
-  (let []
-    ))
-
 (def vs-source "
     attribute vec4 aVertexPosition;
     attribute vec2 aTextureCoord;
@@ -292,7 +288,8 @@
         gl           (.getContext gl-canvas "webgl" #js{:premultipliedAlpha false
                                                         :alpha              false})
         text-canvas  (.querySelector js/document "#textCanvas")
-        text-context (.getContext text-canvas "2d")]
+        text-context (.getContext text-canvas "2d")
+        fps-div      (when (:show-fps? props) (.querySelector js/document "#fps"))]
     (if (nil? gl)
       (js/alert "Unable to initialize WebGL. Your browser or machine may not support it.")
       (let [program (init-shader-program gl vs-source fs-source)
@@ -320,6 +317,7 @@
                          :font (or (:font props)
                                    {:family "Arial"
                                     :size 16})
+                         :fps-div           fps-div
                          :projection-matrix projection-matrix
                          :program-info      program-info
                          :buffers           buffers
@@ -328,9 +326,14 @@
                          :update-fn         (:update-fn props)
                          :draw-fn           (:draw-fn props)})))))
 
+(defn show-fps [fps-div delta]
+  (when fps-div
+    (set! (.-textContent fps-div) (Math/floor (/ 1000 delta)))))
+
 (defn render [now]
-  (when-let [{:keys [update-fn]} @context]
+  (when-let [{:keys [fps-div update-fn]} @context]
     (let [delta (- now @then)]
+      (show-fps fps-div delta)
       (reset! then now)
       (when update-fn (update-fn delta))
       (draw)
