@@ -3,6 +3,7 @@
             [clojure.string :as str]))
 
 (def context (atom {:state :title-screen
+                    :time-since-last-input 0
                     :board []
                     :falling-pieces {}}))
 
@@ -14,6 +15,8 @@
 
 (def empty-piece {:piece-type :empty
                   :suffixes #{}})
+
+(def min-time-since-last-input 0.25)
 
 (def texture-offset-x 1)
 (def texture-offset-y 1)
@@ -179,6 +182,63 @@
 (defn update-animated-pieces [delta]
   (update-falling-pieces delta))
 
+(defn locked? [x y]
+  (get-in @context [:board x y :suffixes :l]))
+
+(defn add-rotating-piece [x y clockwise?]
+  (when-not (locked? x y)
+    (let [piece (get-in @context [:board x y])
+          suffix (get-in piece [:suffixes :l])
+          piece-type (:piece-type piece)]
+      (swap! context assoc-in [:rotating-pieces {:x x :y y}]
+             {:piece-type piece-type
+              :clockwise? clockwise?
+              :suffixes (cond-> #{} suffix (conj suffix))}))))
+
+(defn rotate-piece [x y clockwise?]
+  (when-not (locked? x y)
+    (let [piece-type (get-in @context [:board x y :piece-type])
+          piece-type (or ({[:left-right true]    :top-bottom
+                           [:left-right false]   :top-bottom
+
+                           [:top-bottom true]    :left-right
+                           [:top-bottom false]   :left-right
+
+                           [:left-top true]      :top-right
+                           [:left-top false]     :bottom-left
+
+                           [:top-right true]     :right-bottom
+                           [:top-right false]    :left-top
+
+                           [:right-bottom true]  :bottom-left
+                           [:right-bottom false] :top-right
+
+                           [:bottom-left true]   :left-top
+                           [:bottom-left false]  :right-bottom}
+                          [piece-type clockwise?])
+                         :empty)]
+      (swap! context assoc-in [:board x y :piece-type] piece-type))))
+
+(defn handle-mouse-input []
+  (when-let [mouse-state (engine/get-mouse-state)]
+    (let [x (Math/floor (/ (- (:x mouse-state) game-board-display-position-x) piece-width))
+          y (Math/floor (/ (- (:y mouse-state) game-board-display-position-y) piece-height))]
+      (when (and (>= x 0) (< x board-width)
+                 (>= y 0) (< y board-height))
+        (case (:button mouse-state)
+          :left
+          (do
+            (add-rotating-piece x y true)
+            (rotate-piece x y true))
+
+          :right
+          (do
+            (add-rotating-piece x y false)
+            (rotate-piece x y false))
+
+          nil)
+        (swap! context assoc :time-since-last-input 0)))))
+
 (defn update* [delta]
   (let [{:keys [state]} @context]
     (case state
@@ -191,13 +251,19 @@
 
       :playing
       (do
+        (swap! context update :time-since-last-input + (* delta 0.001))
+        
         (if (are-pieces-animating?)
           (update-animated-pieces delta)
           (do
             (reset-water)
             (doseq [y (range board-height)]
               (get-water-chain y))
-            )))
+            ))
+
+        (when (>= (:time-since-last-input @context) min-time-since-last-input)
+          (handle-mouse-input))
+        )
 
       nil))
   )
