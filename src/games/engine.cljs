@@ -212,16 +212,17 @@
        ","     (aget color 3)
        ")"))
 
-(defn draw-text [{:keys [text origin color scale font]}]
+(defn draw-text [{:keys [text color scale font position align]}]
   (let [{ctx :text-context canvas :text-canvas font* :font} @context
         {:keys [family size]} (merge font* font)
         width  (.-width (.measureText ctx text))
-        height (if scale (Math/floor (* size scale)) size)]
+        height (if scale (Math/floor (* size scale)) size)
+        {:keys [x y]} (or position {:x 0 :y 0})]
     (set! (.-font ctx)        (str height "px " family))
     (set! (.-fillStyle ctx)   (if color (rgba-color color) "white"))
-    (set! (.-textAlign ctx)    "center")
+    (set! (.-textAlign ctx) (or (and align (name align)) "center"))
     (set! (.-textBaseline ctx) "middle")
-    (.fillText ctx text (:x origin) (:y origin))))
+    (.fillText ctx text x y)))
 
 (defn init-buffers [gl]
   (let [position-buffer (.createBuffer gl)

@@ -48,6 +48,8 @@
 
 (def water-overlay-start {:x 85  :y 245})
 (def water-position      {:x 478 :y 338})
+(def score-position      {:x 608 :y 245})
+(def level-text-position {:x 514 :y 245})
 
 (def time-between-flood-increase 1)
 
@@ -198,19 +200,36 @@
                          :y (+ (:y water-overlay-start) (- max-water-height water-height))
                          :w water-width
                          :h water-height}
-            :color (engine/rgb-color [255 255 255 180])})))
+            :color (engine/rgb-color [255 255 255 180])}))
+
+        (doseq [score-zoom (:score-zooms ctx)]
+          (engine/draw-text {:position {:x 400 :y 300}
+                             :text (:text score-zoom)
+                             :color (:color score-zoom)
+                             :scale (:scale score-zoom)}))
+
+        (engine/draw-text {:text (:player-score ctx)
+                           :font {:size 36}
+                           :align :start
+                           :color (engine/color [0.0 0.0 0.0 1.0])
+                           :position score-position})
+        (engine/draw-text {:text (:current-level ctx)
+                           :font {:size 36}
+                           :align :start
+                           :color (engine/color [0.0 0.0 0.0 1.0])
+                           :position level-text-position}))
 
       :game-over
       (do
         (draw-background textures)
         (draw-board ctx)
-        (engine/draw-text {:origin {:x 400 :y 300}
+        (engine/draw-text {:position {:x 400 :y 300}
                            :scale 7
                            :color (engine/color [1.0 0.0 0.0 0.7])
                            :text "GAME OVER"}))
       
       :paused
-      (engine/draw-text {:origin {:x 400 :y 300}
+      (engine/draw-text {:position {:x 400 :y 300}
                          :scale 7
                          :text "P A U S E D"})
 
@@ -300,6 +319,16 @@
       (update-falling-pieces delta)
       (update-rotating-pieces delta))))
 
+(defn update-score-zooms [score-zooms]
+  (->> score-zooms
+       (mapv (fn [score-zoom]
+               (-> score-zoom
+                   (update :scale + (:last-scale-amount score-zoom) (:scale-amount score-zoom))
+                   (update :last-scale-amount + (:scale-amount score-zoom))
+                   (update :display-counter inc))))
+       (filterv (fn [score-zoom]
+                  (not (> (:display-counter score-zoom) (:max-display-count score-zoom)))))))
+
 (defn add-rotating-piece [x y clockwise?]
   (when-not (locked? x y)
     (let [piece (get-in @context [:board x y])
@@ -376,6 +405,7 @@
         (new-board)
         (clear-board)
         (generate-new-pieces false)
+        (swap! context assoc :player-score 0)
         (swap! context assoc :current-level 0)
         (swap! context assoc :flood-increase-amount 0)
         (swap! context assoc :state :playing)
@@ -405,15 +435,21 @@
                              (has-connector? (:x last-pipe) (:y last-pipe) "right"))
                     (let [piece-count (count chain)
                           locked-water-pieces (count (filter :locked? chain))
-                          score (* (+ (Math/pow (/ piece-count 5) 2)
-                                      piece-count
-                                      (Math/pow (/ locked-water-pieces 5) 2)
-                                      locked-water-pieces)
-                                   10)]
-                      (swap! context assoc :player-score + score)
+                          score (Math/floor
+                                 (* (+ (Math/pow (/ piece-count 5) 2)
+                                       piece-count
+                                       (Math/pow (/ locked-water-pieces 5) 2)
+                                       locked-water-pieces)
+                                    10))]
+                      (swap! context update :player-score + score)
                       (swap! context update :lines-completed-this-level inc)
                       (swap! context assoc :flood-count (clamp (- (:flood-count @context) (/ score 10)) 0 100))
                       (swap! context update :score-zooms conj {:text (str "+" score)
+                                                               :max-display-count 30
+                                                               :display-counter 0
+                                                               :scale 0.4
+                                                               :last-scale-amount 0.0
+                                                               :scale-amount 0.4
                                                                :color (engine/color [1.0 0.0 0.0 0.4])})
 
                       (doseq [scoring-square chain]
@@ -430,6 +466,8 @@
             (when (>= (:time-since-last-input @context) min-time-since-last-input)
               (handle-mouse-input))))
 
+        (swap! context update :score-zooms update-score-zooms)
+
         (when (and (>= (:time-since-last-input @context) min-time-since-last-input)
                    (engine/key-pressed? :KeyP))
           (swap! context assoc :time-since-last-input 0)
@@ -443,7 +481,7 @@
 
       :paused
       (do
-        (swap! context update :time-since-last-input + delta)
+        (swap! context update :time-since-last-input + (* delta 0.001))
         (when (and (>= (:time-since-last-input @context) min-time-since-last-input)
                    (engine/key-pressed? :KeyP))
           (swap! context assoc :time-since-last-input 0)
@@ -465,36 +503,3 @@
   (swap! context assoc-in [:textures :tile-sheet]   (engine/load-texture (texture "tile_sheet.png")))
 
   (engine/run))
-
-
-
-;; (engine/draw-rectangle
-;;  {:texture (:tile-sheet textures)
-;;   :size {:width 40 :height 40}
-;;   :tex-coords {:x 1 :y 247 :w 40 :h 40}
-;;   :position {:x 1 :y 1}})
-
-;; (engine/draw-rectangle
-;;  {:texture (:tile-sheet textures)
-;;   :size {:width 40 :height 40}
-;;   :tex-coords {:x 1 :y 1 :w 40 :h 40}
-;;   :origin {:x 110 :y 40}})
-
-;; (engine/draw-rectangle
-;;  {:texture (:tile-sheet textures)
-;;   :size {:width 40 :height 40}
-;;   :tex-coords {:x 1 :y 247 :w 40 :h 40}
-;;   :origin {:x 160 :y 40}})
-
-;; (engine/draw-rectangle
-;;  {:texture (:tile-sheet textures)
-;;   :size {:width 40 :height 40}
-;;   :tex-coords {:x 41 :y 1 :w 40 :h 40}
-;;   :color (engine/color [1.0 1.0 0.0 1.0])
-;;   :origin {:x 160 :y 40}})
-
-;; (engine/draw-text
-;;  {:text "Hello world"
-;;   :font {:size 24}
-;;   :color (engine/color [1.0 1.0 0.0 0.7])
-;;   :origin {:x 200 :y 200}})
