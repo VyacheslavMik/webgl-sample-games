@@ -189,7 +189,6 @@
       :playing
       (do
         (draw-background textures)
-        (draw-board ctx)
 
         (let [water-height (* max-water-height (/ (:flood-count ctx) 100))]
           (engine/draw-rectangle
@@ -201,6 +200,8 @@
                          :w water-width
                          :h water-height}
             :color (engine/rgb-color [255 255 255 180])}))
+
+        (draw-board ctx)
 
         (doseq [score-zoom (:score-zooms ctx)]
           (engine/draw-text {:position {:x 400 :y 300}

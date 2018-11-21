@@ -3,38 +3,36 @@
 (def context         (atom nil))
 (def then            (atom 0))
 
-(def color-white (js/Float32Array. [1.0 1.0 1.0 1.0]))
-
-(defn color [v]
-  (js/Float32Array. v))
-
-(defn rgb-color [v]
-  (js/Float32Array. (mapv #(/ % 255) v)))
+(def color-white [1.0 1.0 1.0 1.0])
+(defn color [v] v)
+(defn rgb-color [v] (mapv #(/ % 255) v))
 
 (def vs-source "
     attribute vec4 aVertexPosition;
+    attribute vec4 aVertexColor;
     attribute vec2 aTextureCoord;
 
-    uniform mat4 uModelViewMatrix;
     uniform mat4 uProjectionMatrix;
 
     varying highp vec2 vTextureCoord;
+    varying lowp vec4 vColor;
 
     void main(void) {
-      gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+      gl_Position = uProjectionMatrix * aVertexPosition;
       vTextureCoord = aTextureCoord;
+      vColor = aVertexColor;
     }")
 
 (def fs-source "
     precision mediump float;
 
     varying highp vec2 vTextureCoord;
+    varying lowp vec4 vColor;
 
     uniform sampler2D uSampler;
-    uniform vec4 uColor;
 
     void main() {
-      gl_FragColor = texture2D(uSampler, vTextureCoord) * uColor;
+      gl_FragColor = texture2D(uSampler, vTextureCoord) * vColor;
       gl_FragColor.rgb *= gl_FragColor.a;
     }")
 
@@ -102,114 +100,11 @@
               (.getProgramInfoLog gl shader-program)))
         nil))))
 
-(defn draw-rectangle [{:keys [color effect origin position size texture tex-coords]}]
-  (when-let [{:keys [buffers gl program-info textures]} @context]
-    (let [tex-size (get textures texture)
-          size (or size
-                   (and tex-coords {:width (:w tex-coords)
-                                    :height (:h tex-coords)})
-                   tex-size)
-          half-height (/ (:height size) 2)
-          half-width  (/ (:width size) 2)
-          positions [   half-width     half-height
-                     (- half-width)    half-height
-                     half-width  (- half-height)
-                     (- half-width) (- half-height)]
-          texture-coordinates (if (and tex-coords tex-size)
-                                (let [{:keys [x y w h]} tex-coords
-                                      {:keys [width height]} tex-size
-                                      x2 (/ (+ x w) width)
-                                      y2 (/ (+ y h) height)
-                                      x1 (/ x width)
-                                      y1 (/ y height)]
-                                  [x2 y2
-                                   x1 y2
-                                   x2 y1
-                                   x1 y1])
-                                [1.0  1.0
-                                 0.0  1.0
-                                 1.0  0.0
-                                 0.0  0.0])
-          model-view-matrix (.create js/mat4)]
-
-      (let [[x y] (cond
-                    origin
-                    [(:x origin) (:y origin)]
-
-                    position
-                    [(+ (:x position) half-width) (+ (:y position) half-height)]
-
-                    :else
-                    [half-width half-height])]
-        (.translate js/mat4 model-view-matrix model-view-matrix #js[x y 0.0]))
-
-      (case (:type effect)
-        :rotate
-        (.rotate js/mat4 model-view-matrix model-view-matrix (* (:angle effect) (/ Math/PI 180)) #js[0 0 1])
-
-        :flip
-        (.rotate js/mat4 model-view-matrix model-view-matrix (* 180 (/ Math/PI 180)) #js[0 1 0])
-
-        nil)
-
-      (.uniformMatrix4fv gl
-                         (-> program-info :uniform-locations :model-view-matrix)
-                         false
-                         model-view-matrix)
-
-      (.bindBuffer gl (.-ARRAY_BUFFER gl) (:position buffers))
-      (.bufferData gl (.-ARRAY_BUFFER gl) (js/Float32Array. positions) (.-STATIC_DRAW gl))
-
-      (.bindBuffer gl (.-ARRAY_BUFFER gl) (:texture-coord buffers))
-      (.bufferData gl (.-ARRAY_BUFFER gl) (js/Float32Array. texture-coordinates) (.-STATIC_DRAW gl))
-
-      (let [num-components 2
-            type (.-FLOAT gl)
-            normalize false
-            stride 0
-            offset 0]
-        (.bindBuffer gl (.-ARRAY_BUFFER gl) (:position buffers))
-        (.vertexAttribPointer gl
-                              (-> program-info :attrib-locations :vertex-position)
-                              num-components
-                              type
-                              normalize
-                              stride
-                              offset)
-        (.enableVertexAttribArray gl (-> program-info :attrib-locations :vertex-position)))
-
-      (let [num-components 2
-            type (.-FLOAT gl)
-            normalize false
-            stride 0
-            offset 0]
-        (.bindBuffer gl (.-ARRAY_BUFFER gl) (:texture-coord buffers))
-        (.vertexAttribPointer gl
-                              (-> program-info :attrib-locations :texture-coord)
-                              num-components
-                              type
-                              normalize
-                              stride
-                              offset)
-        (.enableVertexAttribArray gl (-> program-info :attrib-locations :texture-coord)))
-
-      (if color
-        (.uniform4fv gl (-> program-info :uniform-locations :u-color) color)
-        (.uniform4fv gl (-> program-info :uniform-locations :u-color) color-white))
-
-      (.activeTexture gl (.-TEXTURE0 gl))
-      (.bindTexture gl (.-TEXTURE_2D gl) texture)
-      (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
-      
-      (let [offset 0
-            vertex-count 4]
-        (.drawArrays gl (.-TRIANGLE_STRIP gl) offset vertex-count)))))
-
 (defn rgba-color [color]
-  (str "rgba(" (Math/floor (* 255 (aget color 0)))
-       ","     (Math/floor (* 255 (aget color 1)))
-       ","     (Math/floor (* 255 (aget color 2)))
-       ","     (aget color 3)
+  (str "rgba(" (Math/floor (* 255 (get color 0)))
+       ","     (Math/floor (* 255 (get color 1)))
+       ","     (Math/floor (* 255 (get color 2)))
+       ","     (get color 3)
        ")"))
 
 (defn draw-text [{:keys [text color scale font position align]}]
@@ -225,13 +120,126 @@
     (.fillText ctx text x y)))
 
 (defn init-buffers [gl]
-  (let [position-buffer (.createBuffer gl)
+  (let [position-buffer      (.createBuffer gl)
+        color-buffer         (.createBuffer gl)
         texture-coord-buffer (.createBuffer gl)]
-    {:position      position-buffer
-     :texture-coord texture-coord-buffer}))
+    {:vertex-position      position-buffer
+     :vertex-color         color-buffer
+     :texture-coordinate   texture-coord-buffer}))
+
+(defn rotate-point [x y cos-angle sin-angle]
+  (let [x' (- (* x cos-angle) (* y sin-angle))
+        y' (+ (* x sin-angle) (* y cos-angle))]
+    [x' y']))
+
+(defn rotate-rectangle [x1 y1 x2 y2 angle]
+  (let [angle-rad (* angle (/ Math/PI 180))
+        cos-angle (Math/cos angle-rad)
+        sin-angle (Math/sin angle-rad)]
+    (vec
+     (concat
+      (rotate-point x2 y2 cos-angle sin-angle)
+      (rotate-point x1 y2 cos-angle sin-angle)
+      (rotate-point x2 y1 cos-angle sin-angle)
+      (rotate-point x1 y2 cos-angle sin-angle)
+      (rotate-point x2 y1 cos-angle sin-angle)
+      (rotate-point x1 y1 cos-angle sin-angle)))))
+
+(defn draw-rectangle [rectangle]
+  (swap! context update :rectangles conj rectangle))
+
+(defn prepare-data [{:keys [textures]} rectangles]
+  (when rectangles
+    (loop [[{:keys [color effect origin position size texture tex-coords]} & rest :as rectangles] rectangles
+           positions*  []
+           colors*     []
+           tex-coords* []
+           prev-tex   texture]
+      (if (= prev-tex texture)
+        (let [tex-size (get textures texture)
+              size (or size
+                       (and tex-coords {:width (:w tex-coords)
+                                        :height (:h tex-coords)})
+                       tex-size)
+              half-height (/ (:height size) 2)
+              half-width  (/ (:width size) 2)
+
+              x1 (- half-width)  x2 half-width
+              y1 (- half-height) y2 half-height
+
+              [x y] (cond
+                      origin   [(:x origin) (:y origin)]
+                      position [(+ (:x position) half-width) (+ (:y position) half-height)]
+                      :else     [half-width half-height])
+
+              vertex-positions (if (= (:type effect) :rotate)
+                                 (rotate-rectangle x1 y1 x2 y2 (:angle effect))
+                                 [x2 y2
+                                  x1 y2
+                                  x2 y1
+                                  x1 y2
+                                  x2 y1
+                                  x1 y1])
+              vertex-positions (->> vertex-positions
+                                    (map-indexed vector)
+                                    (mapv (fn [[i v]]
+                                            (+ v (if (odd? i) y x)))))
+              
+              texture-coordinates (let [[x1 x2 y1 y2]
+                                        (if (and tex-coords tex-size)
+                                          (let [{:keys [x y w h]} tex-coords
+                                                {:keys [width height]} tex-size
+                                                x2 (/ (+ x w) width)
+                                                y2 (/ (+ y h) height)
+                                                x1 (/ x width)
+                                                y1 (/ y height)]
+                                            [x1 x2 y1 y2])
+                                          [0 1 0 1])]
+                                    (if (= (:type effect) :flip)
+                                      [x1 y2
+                                       x2 y2
+                                       x1 y1
+                                       x2 y2
+                                       x1 y1
+                                       x2 y1]
+                                      [x2 y2
+                                       x1 y2
+                                       x2 y1
+                                       x1 y2
+                                       x2 y1
+                                       x1 y1]))
+              color (or color color-white)
+              vertex-colors (concat color color color color color color)]
+          (recur rest
+                 (into positions*  vertex-positions)
+                 (into colors*     vertex-colors)
+                 (into tex-coords* texture-coordinates)
+                 texture))
+        {:vertex-position     positions*
+         :vertex-color        colors*
+         :texture-coordinate  tex-coords*
+         :texture             prev-tex
+         :rectangles rectangles}))))
+
+(defn prepare-buffer [{:keys [gl buffers program-info]} data num k]
+  (let [num-components num
+        type (.-FLOAT gl)
+        normalize false
+        stride 0
+        offset 0]
+    (.bindBuffer gl (.-ARRAY_BUFFER gl) (get buffers k))
+    (.bufferData gl (.-ARRAY_BUFFER gl) (js/Float32Array. (get data k)) (.-STATIC_DRAW gl))
+    (.vertexAttribPointer gl
+                          (-> program-info :attrib-locations k)
+                          num-components
+                          type
+                          normalize
+                          stride
+                          offset)
+    (.enableVertexAttribArray gl (-> program-info :attrib-locations k))))
 
 (defn draw []
-  (when-let [{:keys [gl program-info buffers texture projection-matrix draw-fn] :as ctx} @context]
+  (when-let [{:keys [gl program-info buffers projection-matrix draw-fn] :as ctx} @context]
     (.clearColor gl 0.0 0.0 0.0 1.0)
     (.clearDepth gl 1.0)
     (.enable     gl (.-BLEND gl))
@@ -248,7 +256,21 @@
                        false
                        projection-matrix)
     (when draw-fn
-      (draw-fn))))
+      (draw-fn)
+      (loop [data (prepare-data ctx (:rectangles @context))]
+        (when data
+          (prepare-buffer ctx data 2 :vertex-position)
+          (prepare-buffer ctx data 4 :vertex-color)
+          (prepare-buffer ctx data 2 :texture-coordinate)
+
+          (.activeTexture gl (.-TEXTURE0 gl))
+          (.bindTexture gl (.-TEXTURE_2D gl) (:texture data))
+          (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
+          
+          (let [offset 0
+                vertex-count (/ (-> data :vertex-position count) 2)]
+            (.drawArrays gl (.-TRIANGLES gl) offset vertex-count))
+          (recur (prepare-data ctx (:rectangles data))))))))
 
 (defn handle-key-down [ev]
   (swap! context update :pressed-keys conj (keyword (.-code ev))))
@@ -298,18 +320,16 @@
       (js/alert "Unable to initialize WebGL. Your browser or machine may not support it.")
       (let [program (init-shader-program gl vs-source fs-source)
             vertex-position   (.getAttribLocation  gl program "aVertexPosition")
+            vertex-color      (.getAttribLocation  gl program "aVertexColor")
             texture-coord     (.getAttribLocation  gl program "aTextureCoord")
             projection-matrix (.getUniformLocation gl program "uProjectionMatrix")
-            model-view-matrix (.getUniformLocation gl program "uModelViewMatrix")
             u-sampler         (.getUniformLocation gl program "uSampler")
-            u-color           (.getUniformLocation gl program "uColor")
             program-info {:program program
-                          :attrib-locations {:vertex-position vertex-position
-                                             :texture-coord   texture-coord}
+                          :attrib-locations {:vertex-position    vertex-position
+                                             :vertex-color       vertex-color
+                                             :texture-coordinate texture-coord}
                           :uniform-locations {:projection-matrix projection-matrix
-                                              :model-view-matrix model-view-matrix
-                                              :u-sampler         u-sampler
-                                              :u-color           u-color}}
+                                              :u-sampler         u-sampler}}
             buffers (init-buffers gl)
             projection-matrix (.create js/mat4)]
         (register-events text-canvas)
@@ -340,6 +360,7 @@
       (show-fps fps-div delta)
       (reset! then now)
       (when update-fn (update-fn delta))
+      (swap! context assoc :rectangles [])
       (draw)
       (js/requestAnimationFrame render))))
 
