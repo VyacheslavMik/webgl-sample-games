@@ -4,3 +4,4 @@ out/
 figwheel_server.log
 resources/public/js/compiled/
 .DS_Store
+.rebel_readline_history

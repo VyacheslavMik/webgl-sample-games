@@ -8,6 +8,9 @@
 (defn color [v]
   (js/Float32Array. v))
 
+(defn rgb-color [v]
+  (js/Float32Array. (mapv #(/ % 255) v)))
+
 (def vs-source "
     attribute vec4 aVertexPosition;
     attribute vec2 aTextureCoord;
