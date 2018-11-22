@@ -119,23 +119,22 @@
     (set! (.-textBaseline ctx) "middle")
     (.fillText ctx text x y)))
 
-(defn rotate-point [x y cos-angle sin-angle]
+(defn rotate-point [rect x y cos-angle sin-angle]
   (let [x' (- (* x cos-angle) (* y sin-angle))
         y' (+ (* x sin-angle) (* y cos-angle))]
-    [x' y']))
+    (conj rect x' y')))
 
 (defn rotate-rectangle [x1 y1 x2 y2 angle]
   (let [angle-rad (* angle (/ Math/PI 180))
         cos-angle (Math/cos angle-rad)
         sin-angle (Math/sin angle-rad)]
-    (vec
-     (concat
-      (rotate-point x2 y2 cos-angle sin-angle)
-      (rotate-point x1 y2 cos-angle sin-angle)
-      (rotate-point x2 y1 cos-angle sin-angle)
-      (rotate-point x1 y2 cos-angle sin-angle)
-      (rotate-point x2 y1 cos-angle sin-angle)
-      (rotate-point x1 y1 cos-angle sin-angle)))))
+    (-> []
+        (rotate-point x2 y2 cos-angle sin-angle)
+        (rotate-point x1 y2 cos-angle sin-angle)
+        (rotate-point x2 y1 cos-angle sin-angle)
+        (rotate-point x1 y2 cos-angle sin-angle)
+        (rotate-point x2 y1 cos-angle sin-angle)
+        (rotate-point x1 y1 cos-angle sin-angle))))
 
 (defn draw-rectangle [rectangle]
   (swap! context update :rectangles conj rectangle))
