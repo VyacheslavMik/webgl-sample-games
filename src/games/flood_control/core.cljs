@@ -1,4 +1,4 @@
-(ns games.flood-control
+(ns games.flood-control.core
   (:require [games.engine :as engine]
             [clojure.string :as str]))
 

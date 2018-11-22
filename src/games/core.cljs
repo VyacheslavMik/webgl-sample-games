@@ -1,5 +1,5 @@
 (ns games.core
-  (:require [games.flood-control :as flood-control]))
+  (:require [games.flood-control.core :as flood-control]))
 
 (enable-console-print!)
 
