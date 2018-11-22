@@ -119,14 +119,6 @@
     (set! (.-textBaseline ctx) "middle")
     (.fillText ctx text x y)))
 
-(defn init-buffers [gl]
-  (let [position-buffer      (.createBuffer gl)
-        color-buffer         (.createBuffer gl)
-        texture-coord-buffer (.createBuffer gl)]
-    {:vertex-position      position-buffer
-     :vertex-color         color-buffer
-     :texture-coordinate   texture-coord-buffer}))
-
 (defn rotate-point [x y cos-angle sin-angle]
   (let [x' (- (* x cos-angle) (* y sin-angle))
         y' (+ (* x sin-angle) (* y cos-angle))]
@@ -151,10 +143,8 @@
 (defn prepare-data [{:keys [textures]} rectangles]
   (when rectangles
     (loop [[{:keys [color effect origin position size texture tex-coords]} & rest :as rectangles] rectangles
-           positions*  []
-           colors*     []
-           tex-coords* []
-           prev-tex   texture]
+           data     []
+           prev-tex texture]
       (if (= prev-tex texture)
         (let [tex-size (get textures texture)
               size (or size
@@ -180,10 +170,6 @@
                                   x1 y2
                                   x2 y1
                                   x1 y1])
-              vertex-positions (->> vertex-positions
-                                    (map-indexed vector)
-                                    (mapv (fn [[i v]]
-                                            (+ v (if (odd? i) y x)))))
               
               texture-coordinates (let [[x1 x2 y1 y2]
                                         (if (and tex-coords tex-size)
@@ -211,24 +197,25 @@
               color (or color color-white)
               vertex-colors (concat color color color color color color)]
           (recur rest
-                 (into positions*  vertex-positions)
-                 (into colors*     vertex-colors)
-                 (into tex-coords* texture-coordinates)
+                 (loop [[vx vy & vs] vertex-positions
+                        [r g b a]    color
+                        [tx ty & ts] texture-coordinates
+                        res data]
+                   (if (and vx vy)
+                     (recur vs color ts
+                            (conj res
+                                  (+ vx x) (+ vy y)
+                                  r g b a
+                                  tx ty))
+                     res))
                  texture))
-        {:vertex-position     positions*
-         :vertex-color        colors*
-         :texture-coordinate  tex-coords*
-         :texture             prev-tex
+        {:data       data
+         :texture    prev-tex
          :rectangles rectangles}))))
 
-(defn prepare-buffer [{:keys [gl buffers program-info]} data num k]
-  (let [num-components num
-        type (.-FLOAT gl)
-        normalize false
-        stride 0
-        offset 0]
-    (.bindBuffer gl (.-ARRAY_BUFFER gl) (get buffers k))
-    (.bufferData gl (.-ARRAY_BUFFER gl) (js/Float32Array. (get data k)) (.-STATIC_DRAW gl))
+(defn prepare-vertex-attrib [{:keys [gl program-info]} k num-components stride offset]
+  (let [type (.-FLOAT gl)
+        normalize false]
     (.vertexAttribPointer gl
                           (-> program-info :attrib-locations k)
                           num-components
@@ -238,8 +225,15 @@
                           offset)
     (.enableVertexAttribArray gl (-> program-info :attrib-locations k))))
 
+(defn prepare-buffer [{:keys [gl buffer] :as ctx} data]
+  (.bindBuffer gl (.-ARRAY_BUFFER gl) buffer)
+  (.bufferData gl (.-ARRAY_BUFFER gl) (js/Float32Array. data) (.-STATIC_DRAW gl))
+  (prepare-vertex-attrib ctx :vertex-position    2 32 0)
+  (prepare-vertex-attrib ctx :vertex-color       4 32 8)
+  (prepare-vertex-attrib ctx :texture-coordinate 2 32 24))
+
 (defn draw []
-  (when-let [{:keys [gl program-info buffers projection-matrix draw-fn] :as ctx} @context]
+  (when-let [{:keys [gl program-info projection-matrix draw-fn] :as ctx} @context]
     (.clearColor gl 0.0 0.0 0.0 1.0)
     (.clearDepth gl 1.0)
     (.enable     gl (.-BLEND gl))
@@ -259,17 +253,12 @@
       (draw-fn)
       (loop [data (prepare-data ctx (:rectangles @context))]
         (when data
-          (prepare-buffer ctx data 2 :vertex-position)
-          (prepare-buffer ctx data 4 :vertex-color)
-          (prepare-buffer ctx data 2 :texture-coordinate)
+          (prepare-buffer ctx (:data data))
 
           (.activeTexture gl (.-TEXTURE0 gl))
           (.bindTexture gl (.-TEXTURE_2D gl) (:texture data))
           (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
-          
-          (let [offset 0
-                vertex-count (/ (-> data :vertex-position count) 2)]
-            (.drawArrays gl (.-TRIANGLES gl) offset vertex-count))
+          (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> data :data count) 8))
           (recur (prepare-data ctx (:rectangles data))))))))
 
 (defn handle-key-down [ev]
@@ -330,7 +319,6 @@
                                              :texture-coordinate texture-coord}
                           :uniform-locations {:projection-matrix projection-matrix
                                               :u-sampler         u-sampler}}
-            buffers (init-buffers gl)
             projection-matrix (.create js/mat4)]
         (register-events text-canvas)
         (.focus text-canvas)
@@ -344,7 +332,7 @@
                          :fps-div           fps-div
                          :projection-matrix projection-matrix
                          :program-info      program-info
-                         :buffers           buffers
+                         :buffer            (.createBuffer gl)
                          :pressed-keys      #{}
                          :mouse-state       nil
                          :update-fn         (:update-fn props)
