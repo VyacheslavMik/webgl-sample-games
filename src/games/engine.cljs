@@ -5,7 +5,10 @@
 
 (def color-white [1.0 1.0 1.0 1.0])
 (defn color [v] v)
-(defn rgb-color [v] (mapv #(/ % 255) v))
+(defn rgb-color [[r g b a]] [(/ r 255) (/ g 255) (/ b 255) (/ a 255)])
+
+(defn play-sound [url]
+  (.play (js/Audio. url)))
 
 (def vs-source "
     attribute vec4 aVertexPosition;
