@@ -11,6 +11,8 @@
    :output-to     "resources/public/js/compiled/main.js"
    :source-map    "resources/public/js/compiled/main.js.map"
    :output-dir    "resources/public/js/compiled/out"
+   :externs ["resources/public/js/gl-matrix-min.js"]
+   :closure-warnings {:externs-validation :off}
    :optimizations :advanced})
 
 (def dev-config

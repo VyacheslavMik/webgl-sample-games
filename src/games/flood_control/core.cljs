@@ -395,6 +395,16 @@
           nil)
         (swap! context assoc :time-since-last-input 0)))))
 
+(defn handle-touch-input []
+  (when-let [touch-state (engine/get-touch-state)]
+    (let [x (Math/floor (/ (- (:x touch-state) game-board-display-position-x) piece-width))
+          y (Math/floor (/ (- (:y touch-state) game-board-display-position-y) piece-height))]
+      (when (and (>= x 0) (< x board-width)
+                 (>= y 0) (< y board-height))
+        (add-rotating-piece x y true)
+        (rotate-piece x y true)
+        (swap! context assoc :time-since-last-input 0)))))
+
 (defn clamp [v min-v max-v]
   (min max-v (max v min-v)))
 
@@ -402,7 +412,7 @@
   (let [{:keys [state]} @context]
     (case state
       :title-screen
-      (when (engine/key-pressed? :Space)
+      (when (or (engine/key-pressed? :Space) (engine/get-touch-state))
         (new-board)
         (clear-board)
         (generate-new-pieces false)
@@ -465,7 +475,8 @@
             (generate-new-pieces true)
 
             (when (>= (:time-since-last-input @context) min-time-since-last-input)
-              (handle-mouse-input))))
+              (handle-mouse-input)
+              (handle-touch-input))))
 
         (swap! context update :score-zooms update-score-zooms)
 

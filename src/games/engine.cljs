@@ -281,11 +281,23 @@
 (defn handle-mouse-up [ev]
   (swap! context assoc :mouse-state nil))
 
+(defn handle-touch-start [ev]
+  (let [canvas (:gl-canvas @context)
+        touch (get (.-touches ev) 0)]
+    (println (.-clientX ev) (.-left canvas))
+    (swap! context assoc :touch-state {:x (- (.-clientX ev) (.-left canvas))
+                                       :y (- (.-clientY ev) (.-top canvas))})))
+ (defn handle-touch-end [ev]
+  (swap! context assoc :touch-state nil))
+
 (defn key-pressed? [k]
   (get (:pressed-keys @context) k))
 
 (defn get-mouse-state []
   (:mouse-state @context))
+
+(defn get-touch-state []
+  (:touch-state @context))
 
 (defn register-events [text-canvas]
   (.removeEventListener text-canvas "contextmenu" handle-context-menu)
@@ -293,12 +305,16 @@
   (.removeEventListener text-canvas "keyup"       handle-key-up)
   (.removeEventListener text-canvas "mousedown"   handle-mouse-down)
   (.removeEventListener text-canvas "mouseup"     handle-mouse-up)
+  (.addEventListener    text-canvas "touchstart"  handle-touch-start)
+  (.addEventListener    text-canvas "touchend"    handle-touch-end)
 
   (.addEventListener    text-canvas "contextmenu" handle-context-menu)
   (.addEventListener    text-canvas "keydown"     handle-key-down)
   (.addEventListener    text-canvas "keyup"       handle-key-up)
   (.addEventListener    text-canvas "mousedown"   handle-mouse-down)
-  (.addEventListener    text-canvas "mouseup"     handle-mouse-up))
+  (.addEventListener    text-canvas "mouseup"     handle-mouse-up)
+  (.addEventListener    text-canvas "touchstart"  handle-touch-start)
+  (.addEventListener    text-canvas "touchend"    handle-touch-end))
 
 (defn init [& [props]]
   (let [gl-canvas    (.querySelector js/document "#glCanvas")
