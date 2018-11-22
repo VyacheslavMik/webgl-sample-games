@@ -1,0 +1,1 @@
+clojure -R:dev build.clj compile && cp resources/public/index.html . && mkdir -p js && mkdir -p js/compiled && cp resources/public/js/gl-matrix-min.js js && cp resources/public/js/compiled/main.js js/compiled && mkdir -p textures && cp -r resources/public/textures/* textures/
