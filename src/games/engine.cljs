@@ -282,11 +282,10 @@
   (swap! context assoc :mouse-state nil))
 
 (defn handle-touch-start [ev]
-  (let [canvas (:gl-canvas @context)
-        touch (get (.-touches ev) 0)]
-    (println (.-clientX ev) (.-left canvas))
-    (swap! context assoc :touch-state {:x (- (.-clientX ev) (.-left canvas))
-                                       :y (- (.-clientY ev) (.-top canvas))})))
+  (let [rect (.getBoundingClientRect (:text-canvas @context))
+        touch (.. ev -touches (item 0))]
+    (swap! context assoc :touch-state {:x (- (.-clientX touch) (.-left rect))
+                                       :y (- (.-clientY touch) (.-top rect))})))
  (defn handle-touch-end [ev]
   (swap! context assoc :touch-state nil))
 
