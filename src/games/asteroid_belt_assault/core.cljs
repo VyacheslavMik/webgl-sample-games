@@ -19,7 +19,7 @@
 (def asteroid-min-speed 60)
 (def asteroid-max-speed 120)
 
-(defn normalize-velocity [{:keys [x y]}]
+(defn vector-normalize [{:keys [x y]}]
   (let [norm (Math/sqrt (+ (* x x) (* y y)))]
     {:x (/ x norm) :y (/ y norm)}))
 
@@ -89,6 +89,11 @@
                           :width (:frame-width sprite)
                           :height (:frame-height sprite)}
                          rect))
+
+(defn circle-colliding? [{{x1 :x y1 :y} :location radius :collision-radius} {x2 :x y2 :y} other-radius]
+  (let [distance (Math/sqrt (+ (* (- x2 x1) (- x2 x1))
+                               (* (- y2 y1) (- y2 y1))))]
+    (< distance (+ radius other-radius))))
 
 (defn draw-sprite [sprite]
   (let [rotation (:rotation sprite)
@@ -164,9 +169,49 @@
 
 (defn random-velocity []
   (-> {:x (- (rand-int 101) 50) :y (- (rand-int 101) 50)}
-      (normalize-velocity)
+      (vector-normalize)
       (update :x * (+ (rand-int (- asteroid-max-speed asteroid-min-speed)) asteroid-min-speed))
       (update :y * (+ (rand-int (- asteroid-max-speed asteroid-min-speed)) asteroid-min-speed))))
+
+(defn vector-add [v1 v2]
+  (-> v1
+      (update :x + (:x v2))
+      (update :y + (:y v2))))
+
+(defn vector-sub [v1 v2]
+  (-> v1
+      (update :x - (:x v2))
+      (update :y - (:y v2))))
+
+(defn vector-div [v f]
+  (-> v
+      (update :x / f)
+      (update :y / f)))
+
+(defn vector-reflect [v normal]
+  (let [val (* 2 (+ (* (:x v) (:x normal)) (* (:y v) (:y normal))))]
+    (-> v
+        (update :x - (* (:x normal) val))
+        (update :y - (* (:y normal) val)))))
+
+(defn bounce-asteroids [x y]
+  (let [{velocity1 :velocity :as a1} (get-in @context [:asteroids x])
+        {velocity2 :velocity :as a2} (get-in @context [:asteroids y])
+        c-of-mass (vector-div (vector-add velocity1 velocity2) 2)
+        center1 (sprite-center a1)
+        center2 (sprite-center a2)
+        normal1 (-> (vector-sub center2 center1) (vector-normalize))
+        normal2 (-> (vector-sub center1 center2) (vector-normalize))
+        velocity1 (-> velocity1
+                      (vector-sub c-of-mass)
+                      (vector-reflect normal1)
+                      (vector-add c-of-mass))
+        velocity2 (-> velocity2
+                      (vector-sub c-of-mass)
+                      (vector-reflect normal2)
+                      (vector-add c-of-mass))]
+    (swap! context assoc-in [:asteroids x :velocity] velocity1)
+    (swap! context assoc-in [:asteroids y :velocity] velocity2)))
 
 (defn update-asteroids [delta]
   (let [elapsed (* delta 0.001)]
@@ -180,7 +225,13 @@
                     (assoc asteroid
                            :location (random-location asteroid asteroids)
                            :velocity (random-velocity)))))
-              asteroids)))))
+              asteroids)))
+    (doseq [x (range (count (:asteroids @context)))]
+      (doseq [y (range (inc x) (count (:asteroids @context)))]
+        (when (circle-colliding? (get-in @context [:asteroids x])
+                                 (sprite-center (get-in @context [:asteroids y]))
+                                 (get-in @context [:asteroids y :collision-radius]))
+          (bounce-asteroids x y))))))
 
 (defn draw* []
   (let [{:keys [textures state] :as ctx} @context]
@@ -191,8 +242,6 @@
     (when (#{:playing :player-dead :game-over} state)
       (draw-star-field)
       (draw-asteroids)
-      ;; m_starField.Draw(m_spriteBatch);
-      ;; m_asteroidManager.Draw(m_spriteBatch);
       ;; m_playerManager.Draw(m_spriteBatch);
       ;; m_enemyManager.Draw(m_spriteBatch);
       ;; m_explosionManager.Draw(m_spriteBatch);
