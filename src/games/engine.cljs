@@ -1,7 +1,7 @@
 (ns games.engine)
 
-(def context         (atom nil))
-(def then            (atom 0))
+(defonce context         (atom nil))
+(def     then            (atom 0))
 
 (def color-white [1.0 1.0 1.0 1.0])
 (defn color [v] v)
@@ -143,11 +143,11 @@
   (swap! context update :rectangles conj rectangle))
 
 (defn prepare-data [{:keys [textures]} rectangles]
-  (when rectangles
+  (when (> (count rectangles) 0)
     (loop [[{:keys [color effect origin position size texture tex-coords]} & rest :as rectangles] rectangles
            data     []
            prev-tex texture]
-      (if (= prev-tex texture)
+      (if (and (= prev-tex texture) rectangles)
         (let [tex-size (get textures texture)
               size (or size
                        (and tex-coords {:width (:w tex-coords)
@@ -196,8 +196,7 @@
                                        x1 y2
                                        x2 y1
                                        x1 y1]))
-              color (or color color-white)
-              vertex-colors (concat color color color color color color)]
+              color (or color color-white)]
           (recur rest
                  (loop [[vx vy & vs] vertex-positions
                         [r g b a]    color
@@ -211,9 +210,10 @@
                                   tx ty))
                      res))
                  texture))
-        {:data       data
-         :texture    prev-tex
-         :rectangles rectangles}))))
+        (when (and (> (count data) 0) prev-tex)
+          {:data       data
+           :texture    prev-tex
+           :rectangles rectangles})))))
 
 (defn prepare-vertex-attrib [{:keys [gl program-info]} k num-components stride offset]
   (let [type (.-FLOAT gl)
