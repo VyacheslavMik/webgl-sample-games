@@ -19,9 +19,13 @@
 (def asteroid-min-speed 60)
 (def asteroid-max-speed 120)
 
-(defn vector-normalize [{:keys [x y]}]
-  (let [norm (Math/sqrt (+ (* x x) (* y y)))]
-    {:x (/ x norm) :y (/ y norm)}))
+(def min-shot-timer 0.2)
+
+(defn vector-normalize [{:keys [x y] :as v}]
+  (if (= x y 0)
+    v
+    (let [norm (Math/sqrt (+ (* x x) (* y y)))]
+      {:x (/ x norm) :y (/ y norm)})))
 
 (defn rectangle-intersects? [{x1 :x y1 :y w1 :width h1 :height} {x2 :x y2 :y w2 :width h2 :height}]
   (not
@@ -76,6 +80,27 @@
                           :velocity {:x 0 :y 0}))
                  (range asteroid-count)))))
 
+(defn make-player [frame-rect frame-count]
+  (let [texture (get-in @context [:textures :sprite-sheet])
+        frames (mapv (fn [x] (update frame-rect :x + (* (:w frame-rect) x)))
+                     (range 1 frame-count))]
+    (swap! context assoc :player {:sprite (assoc sprite
+                                                 :location {:x 500 :y 500}
+                                                 :texture texture
+                                                 :frames (vec (concat [frame-rect] frames))
+                                                 :collision-radius 15)
+                                  :shots []
+                                  :score 0
+                                  :destroyed? false
+                                  :speed 160
+                                  :gun-offset {:x 25 :y 10}
+                                  :shot-timer 0
+                                  :area-limit {:x 0
+                                               :y (/ screen-height 2)
+                                               :width screen-width
+                                               :height (/ screen-height 2)}
+                                  })))
+
 (defn set-sprite-rotation [sprite v]
   (assoc sprite :rotation (mod v 360)))
 
@@ -105,7 +130,7 @@
                              (and rotation (not= rotation 0)) (assoc :effect {:type :rotate
                                                                               :angle rotation})))))
 
-(defn update-sprite [elapsed sprite]
+(defn update-sprite [sprite elapsed]
   (let [sprite (-> sprite
                    (update :time-for-current-frame + elapsed)
                    (update-in [:location :x] + (* (-> sprite :velocity :x) elapsed))
@@ -126,7 +151,7 @@
            (fn [stars]
              (mapv
               (fn [star]
-                (let [star (update-sprite elapsed star)]
+                (let [star (update-sprite star elapsed)]
                   (if (> (-> star :location :y) screen-height)
                     (assoc star :location {:x (rand-int screen-width) :y 0})
                     star)))
@@ -188,6 +213,11 @@
       (update :x / f)
       (update :y / f)))
 
+(defn vector-mul [v f]
+  (-> v
+      (update :x * f)
+      (update :y * f)))
+
 (defn vector-reflect [v normal]
   (let [val (* 2 (+ (* (:x v) (:x normal)) (* (:y v) (:y normal))))]
     (-> v
@@ -219,7 +249,7 @@
            (fn [asteroids]
              (mapv
               (fn [asteroid]
-                (let [asteroid (update-sprite elapsed asteroid)]
+                (let [asteroid (update-sprite asteroid elapsed)]
                   (if (asteroid-on-screen? asteroid)
                     asteroid
                     (assoc asteroid
@@ -233,6 +263,54 @@
                                  (get-in @context [:asteroids y :collision-radius]))
           (bounce-asteroids x y))))))
 
+(defn draw-player []
+  (draw-sprite (get-in @context [:player :sprite])))
+
+(defn player-velocity [player]
+  (-> (cond-> {:x 0 :y 0}
+        (engine/key-pressed? :KeyW) (vector-add {:x  0 :y -1})
+        (engine/key-pressed? :KeyS) (vector-add {:x  0 :y  1})
+        (engine/key-pressed? :KeyA) (vector-add {:x -1 :y  0})
+        (engine/key-pressed? :KeyD) (vector-add {:x  1 :y  0}))
+      (vector-normalize)
+      (vector-mul (:speed player))))
+
+(defn rectangle-right [rectangle]
+  (+ (:x rectangle) (:width rectangle)))
+
+(defn rectangle-bottom [rectangle]
+  (+ (:y rectangle) (:height rectangle)))
+
+(defn impose-movement-limits [sprite area-limit]
+  (let [hw (/ (-> sprite :frames first :w) 2)
+        hh (/ (-> sprite :frames first :h) 2)]
+    (cond-> sprite
+      (< (-> sprite :location :x) (+ (:x area-limit) hw))
+      (assoc-in [:location :x] (+ (:x area-limit) hw))
+      
+      (> (-> sprite :location :x) (- (rectangle-right area-limit) hw))
+      (assoc-in [:location :x] (- (rectangle-right area-limit) hw))
+
+      (< (-> sprite :location :y) (+ (:y area-limit) hh))
+      (assoc-in [:location :y] (+ (:y area-limit) hh))
+
+      (> (-> sprite :location :y) (- (rectangle-bottom area-limit) hh))
+      (assoc-in [:location :y] (- (rectangle-bottom area-limit) hh)))))
+
+(defn update-player [delta]
+  (let [elapsed (* delta 0.001)]
+    (when-not (-> @context :player :destroyed?)
+      (swap! context update :player
+             (fn [player]
+               (let [sprite (-> (:sprite player)
+                                (assoc :velocity (player-velocity player))
+                                (update-sprite elapsed)
+                                (impose-movement-limits (:area-limit player)))]
+                 (-> player
+                     (update :shot-timer + elapsed)
+                     (assoc :sprite sprite)))
+               )))))
+
 (defn draw* []
   (let [{:keys [textures state] :as ctx} @context]
     (when (= state :title-screen)
@@ -242,7 +320,7 @@
     (when (#{:playing :player-dead :game-over} state)
       (draw-star-field)
       (draw-asteroids)
-      ;; m_playerManager.Draw(m_spriteBatch);
+      (draw-player)
       ;; m_enemyManager.Draw(m_spriteBatch);
       ;; m_explosionManager.Draw(m_spriteBatch);
 
@@ -286,6 +364,7 @@
       (do
         (update-star-field delta)
         (update-asteroids delta)
+        (update-player delta)
         ;; m_starField.Update(gameTime);
         ;; m_asteroidManager.Update(gameTime);
         ;; m_playerManager.Update(gameTime);
@@ -341,5 +420,6 @@
   (swap! context assoc-in [:textures :sprite-sheet] (engine/load-texture (texture "sprite_sheet.png")))
 
   (make-star-field 200 {:x 0 :y 450 :w 2 :h 2} {:x 0 :y 30})
-  (make-asteroids 10 {:x 0 :y 0 :w 50 :h 50} 20))
+  (make-asteroids 10 {:x 0 :y 0 :w 50 :h 50} 20)
+  (make-player {:x 0 :y 150 :w 50 :h 50} 3))
 
