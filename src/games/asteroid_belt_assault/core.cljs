@@ -20,13 +20,36 @@
 (def asteroid-max-speed 120)
 
 (def screen-bounds {:x 0 :y 0 :width screen-width :height screen-height})
+(def off-screen {:x -500 :y -500})
+(def shot-to-asteroid-impact {:x 0 :y -20})
+
+(def min-piece-count 3)
+(def max-piece-count 6)
+(def min-point-count 20)
+(def max-point-count 30)
+
+(def duration-count 120)
+(def explosion-max-speed 30)
+
+(def piece-speed-scale 6)
+(def point-speed-min 15)
+(def point-speed-max 30)
+
+(defn color-mul [color f]
+  (mapv (fn [c] (* c f)) color))
+
+(def initial-color [1.0 0.3 0.0 1.0])
+(def final-color [0 0 0 0])
 
 (def min-shot-timer 0.2)
+
+(defn vector-length [{:keys [x y]}]
+  (Math/sqrt (+ (* x x) (* y y))))
 
 (defn vector-normalize [{:keys [x y] :as v}]
   (if (= x y 0)
     v
-    (let [norm (Math/sqrt (+ (* x x) (* y y)))]
+    (let [norm (vector-length v)]
       {:x (/ x norm) :y (/ y norm)})))
 
 (defn rectangle-intersects? [{x1 :x y1 :y w1 :width h1 :height} {x2 :x y2 :y w2 :width h2 :height}]
@@ -100,8 +123,16 @@
                                   :area-limit {:x 0
                                                :y (/ screen-height 2)
                                                :width screen-width
-                                               :height (/ screen-height 2)}
-                                  })))
+                                               :height (/ screen-height 2)}})))
+
+(defn prepare-explosion [frame-rect piece-count point-rectangle]
+  (let [texture (get-in @context [:textures :sprite-sheet])
+        frames (mapv (fn [x] (update frame-rect :x + (* (:w frame-rect) x)))
+                     (range piece-count))]
+    (swap! context assoc :explosion {:texture texture
+                                     :piece-rectangles frames
+                                     :point-rectangle point-rectangle})))
+    
 
 (defn set-sprite-rotation [sprite v]
   (assoc sprite :rotation (mod v 360)))
@@ -267,9 +298,9 @@
 
 (defn draw-player []
   (let [player (:player @context)]
-    (draw-sprite (:sprite player))
+    (when-not (:destroyed? player)
+      (draw-sprite (:sprite player)))
     (doseq [shot (:shots player)]
-;;      (println shot)
       (draw-sprite shot))))
 
 (defn player-velocity [player]
@@ -333,7 +364,7 @@
 (defn update-shots [shots elapsed]
   (->> shots
        (mapv (fn [shot] (update-sprite shot elapsed)))
-       (filter (fn [shot] (rectangle-intersects?
+       (filterv (fn [shot] (rectangle-intersects?
                            screen-bounds
                            (assoc (:location shot)
                                   :width (:frame-width shot)
@@ -341,20 +372,162 @@
 
 (defn update-player [delta]
   (let [elapsed (* delta 0.001)]
-    (when-not (-> @context :player :destroyed?)
-      (swap! context update :player
-             (fn [player]
-               (let [sprite (-> (:sprite player)
-                                (assoc :velocity (player-velocity player))
-                                (update-sprite elapsed)
-                                (impose-movement-limits (:area-limit player)))
-                     fire-shot? (and (engine/key-pressed? :Space)
-                                     (>= (+ (:shot-timer player) elapsed) min-shot-timer))]
-                 (-> player
-                     (update :shot-timer + elapsed)
-                     (cond-> fire-shot? (fire-shot))
-                     (update :shots (fn [shots] (update-shots shots elapsed)))
-                     (assoc :sprite sprite))))))))
+    (swap! context update :player
+           (fn [player]
+             (let [sprite (-> (:sprite player)
+                              (assoc :velocity (player-velocity player))
+                              (update-sprite elapsed)
+                              (impose-movement-limits (:area-limit player)))
+                   fire-shot? (and (engine/key-pressed? :Space)
+                                   (>= (+ (:shot-timer player) elapsed) min-shot-timer))
+                   alive? (not (:destroyed? player))]
+               (cond-> player
+                 alive?                  (update :shot-timer + elapsed)
+                 (and fire-shot? alive?) (fire-shot)
+                 true (update :shots (fn [shots] (update-shots shots elapsed)))
+                 alive? (assoc :sprite sprite)))))))
+
+(defn check-shot-to-asteroid-collisions []
+  (let [shots (get-in @context [:player :shots])
+        asteroids (get-in @context [:asteroids])]
+    (doseq [i (range (count shots))]
+      (let [shot (get shots i)]
+        (doseq [j (range (count asteroids))]
+          (let [asteroid (get asteroids j)]
+            (when (circle-colliding? shot (sprite-center asteroid) (:collision-radius asteroid))
+              (swap! context assoc-in [:player :shots i :location] off-screen)
+              (swap! context update-in [:asteroids j :velocity] vector-add shot-to-asteroid-impact))))))))
+
+(defn random-direction [scale]
+  (loop [direction {:x (- (rand-int 101) 50) :y (- (rand-int 101) 50)}]
+    (if (= (vector-length direction) 0)
+      (recur {:x (- (rand-int 101) 50) :y (- (rand-int 101) 50)})
+      (-> direction
+          (vector-normalize)
+          (vector-mul scale)))))
+
+(defn random-int [min max]
+  (+ (rand-int (- max min)) min))
+
+(defn new-particle [location texture frame velocity]
+  (assoc sprite
+         :texture texture
+         :location location
+         :frames [frame]
+         :frame-width (:w frame)
+         :frame-height (:h frame)
+         :velocity velocity
+         :initial-duration duration-count
+         :remaining-duration duration-count
+         :acceleration {:x 0 :y 0}
+         :max-speed explosion-max-speed
+         :initial-color initial-color
+         :final-color final-color))
+
+(defn play-explosion []
+  (let [sounds (:explosion-sounds @context)
+        sound (get sounds (rand-int (count sounds)))]
+    (engine/play-sound sound)))
+
+(defn add-explosion [location momentum]
+  (let [piece-rectangles (get-in @context [:explosion :piece-rectangles])
+        point-rectangle (get-in @context [:explosion :point-rectangle])
+        texture (get-in @context [:explosion :texture])
+        piece-location (vector-sub location {:x (/ (-> piece-rectangles first :w) 2)
+                                             :y (/ (-> piece-rectangles first :h) 2)})
+        pieces (random-int min-piece-count (inc max-piece-count))
+        points (random-int min-point-count (inc max-point-count))
+        explosion-particles (:explosion-particles @context)
+        explosion-particles 
+        (loop [x 0
+               res explosion-particles]
+          (if (< x pieces)
+            (recur (inc x) (conj
+                            res
+                            (new-particle piece-location
+                                          texture
+                                          (get piece-rectangles (rand-int (count piece-rectangles)))
+                                          (vector-add (random-direction piece-speed-scale) momentum))))
+            res))
+
+        explosion-particles 
+        (loop [x 0
+               res explosion-particles]
+          (if (< x points)
+            (recur (inc x) (conj
+                            explosion-particles
+                            (new-particle location
+                                          texture
+                                          point-rectangle
+                                          (vector-add (random-direction (random-int point-speed-min
+                                                                                    point-speed-max))
+                                                      momentum))))
+            res))]
+    (swap! context assoc :explosion-particles explosion-particles)
+    (play-explosion)))
+
+(defn check-asteroid-to-player-collisions []
+  (let [player (:player @context)
+        asteroids (:asteroids @context)]
+    (doseq [i (range (count asteroids))]
+      (let [asteroid (get asteroids i)]
+        (when (circle-colliding? asteroid
+                                 (sprite-center (:sprite player))
+                                 (-> player :sprite :collision-radius))
+          (add-explosion (sprite-center asteroid) (vector-div (:velocity asteroid) 10))
+          (swap! context assoc-in [:asteroids i :location] off-screen)
+          (swap! context assoc-in [:player :destroyed?] true)
+          (add-explosion (-> player :sprite sprite-center) {:x 0 :y 0}))))))
+
+(defn check-collisions []
+  (check-shot-to-asteroid-collisions)
+  (when-not (get-in @context [:player :destroyed?])
+    (check-asteroid-to-player-collisions)
+    ))
+
+(defn particle-active? [particle]
+  (> (:remaining-duration particle) 0))
+
+(defn draw-explosions []
+  (doseq [particle (:explosion-particles @context)]
+    (when (particle-active? particle)
+      (draw-sprite particle))))
+
+(defn duration-progress [particle]
+  (/ (- (:initial-duration particle) (:remaining-duration particle)) (:initial-duration particle)))
+
+(defn color-lerp [[ar ag ab aa] [br bg bb ba] t]
+  (let [t (max 0 (min t 1))]
+    [(+ ar (* (- br ar) t))
+     (+ ag (* (- bg ag) t))
+     (+ ab (* (- bb ab) t))
+     (+ aa (* (- ba aa) t))]))
+
+(defn update-particle [particle elapsed]
+  (if (particle-active? particle)
+    (let [velocity (vector-add (:velocity particle) (:acceleration particle))
+          velocity-length (vector-length velocity)
+          velocity (if (> (vector-length velocity) (:max-speed particle))
+                     (-> velocity
+                         (vector-normalize)
+                         (vector-mul (:max-speed particle)))
+                     velocity)
+          color (color-lerp (:initial-color particle)
+                            (:final-color particle)
+                            (duration-progress particle))]
+      (-> particle
+          (assoc :velocity velocity
+                 :tint-color color)
+          (update :remaining-duration dec)
+          (update-sprite elapsed)))
+    particle))
+
+(defn update-explosions [delta]
+  (let [elapsed (* delta 0.001)
+        explosion-particles (->> (:explosion-particles @context)
+                                 (mapv #(update-particle % elapsed))
+                                 (filterv particle-active?))]
+    (swap! context assoc :explosion-particles explosion-particles)))
 
 (defn draw* []
   (let [{:keys [textures state] :as ctx} @context]
@@ -367,7 +540,7 @@
       (draw-asteroids)
       (draw-player)
       ;; m_enemyManager.Draw(m_spriteBatch);
-      ;; m_explosionManager.Draw(m_spriteBatch);
+      (draw-explosions)
 
       ;; m_spriteBatch.DrawString(m_pericles14,
       ;;                          "Score: " + m_playerManager.PlayerScore.ToString(),
@@ -410,11 +583,9 @@
         (update-star-field delta)
         (update-asteroids delta)
         (update-player delta)
-        ;; m_starField.Update(gameTime);
-        ;; m_asteroidManager.Update(gameTime);
-        ;; m_playerManager.Update(gameTime);
         ;; m_enemyManager.Update(gameTime);
-        ;; m_explosionManager.Update(gameTime);
+        (update-explosions delta)
+        (check-collisions)
         ;; m_collisionManager.CheckCollisions();
         
         ;; m_difficultTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
@@ -470,6 +641,9 @@
   (make-star-field 200 {:x 0 :y 450 :w 2 :h 2} {:x 0 :y 30})
   (make-asteroids 10 {:x 0 :y 0 :w 50 :h 50} 20)
   (make-player {:x 0 :y 150 :w 50 :h 50} 3)
+  (prepare-explosion {:x 0 :y 100 :w 50 :h 50} 3 {:x 0 :y 450 :w 2 :h 2})
 
-  (swap! context assoc-in [:player :shot-sound] (sound "shot1.wav")))
+  (swap! context assoc-in [:player :shot-sound] (sound "shot1.wav"))
 
+  (swap! context assoc-in [:explosion-sounds] (mapv (fn [i] (sound (str "explosion" i ".wav")))
+                                                    (range 1 5))))
