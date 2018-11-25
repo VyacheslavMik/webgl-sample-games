@@ -19,6 +19,8 @@
 (def asteroid-min-speed 60)
 (def asteroid-max-speed 120)
 
+(def screen-bounds {:x 0 :y 0 :width screen-width :height screen-height})
+
 (def min-shot-timer 0.2)
 
 (defn vector-normalize [{:keys [x y] :as v}]
@@ -93,7 +95,7 @@
                                   :score 0
                                   :destroyed? false
                                   :speed 160
-                                  :gun-offset {:x 25 :y 10}
+                                  :gun-offset {:x -2.5 :y -18}
                                   :shot-timer 0
                                   :area-limit {:x 0
                                                :y (/ screen-height 2)
@@ -264,7 +266,11 @@
           (bounce-asteroids x y))))))
 
 (defn draw-player []
-  (draw-sprite (get-in @context [:player :sprite])))
+  (let [player (:player @context)]
+    (draw-sprite (:sprite player))
+    (doseq [shot (:shots player)]
+;;      (println shot)
+      (draw-sprite shot))))
 
 (defn player-velocity [player]
   (-> (cond-> {:x 0 :y 0}
@@ -297,6 +303,42 @@
       (> (-> sprite :location :y) (- (rectangle-bottom area-limit) hh))
       (assoc-in [:location :y] (- (rectangle-bottom area-limit) hh)))))
 
+(defn play-player-shot [url]
+  (engine/play-sound url))
+
+(defn new-shot [location velocity shot-speed]
+  (let [texture (get-in @context [:textures :sprite-sheet])
+        frame-rect {:x 0 :y 300 :w 5 :h 5}
+        frame-count 4
+        frames (mapv (fn [x] (update frame-rect :x + (* (:w frame-rect) x)))
+                     (range 1 frame-count))]
+    (assoc sprite
+           :texture texture
+           :location location
+           :velocity (vector-mul velocity shot-speed)
+           :frames (vec (concat [frame-rect] frames))
+           :frame-height (:h frame-rect)
+           :frame-width (:w frame-rect)
+           :collision-radius 2)))
+
+(defn fire-shot [player]
+  (play-player-shot (:shot-sound player))
+  (-> player
+      (assoc :shot-timer 0)
+      (update :shots conj (new-shot (vector-add (-> player :sprite :location)
+                                                (:gun-offset player))
+                                    {:x 0 :y -1}
+                                    250))))
+
+(defn update-shots [shots elapsed]
+  (->> shots
+       (mapv (fn [shot] (update-sprite shot elapsed)))
+       (filter (fn [shot] (rectangle-intersects?
+                           screen-bounds
+                           (assoc (:location shot)
+                                  :width (:frame-width shot)
+                                  :height (:frame-height shot)))))))
+
 (defn update-player [delta]
   (let [elapsed (* delta 0.001)]
     (when-not (-> @context :player :destroyed?)
@@ -305,11 +347,14 @@
                (let [sprite (-> (:sprite player)
                                 (assoc :velocity (player-velocity player))
                                 (update-sprite elapsed)
-                                (impose-movement-limits (:area-limit player)))]
+                                (impose-movement-limits (:area-limit player)))
+                     fire-shot? (and (engine/key-pressed? :Space)
+                                     (>= (+ (:shot-timer player) elapsed) min-shot-timer))]
                  (-> player
                      (update :shot-timer + elapsed)
-                     (assoc :sprite sprite)))
-               )))))
+                     (cond-> fire-shot? (fire-shot))
+                     (update :shots (fn [shots] (update-shots shots elapsed)))
+                     (assoc :sprite sprite))))))))
 
 (defn draw* []
   (let [{:keys [textures state] :as ctx} @context]
@@ -411,6 +456,9 @@
 (defn texture [tex-name]
   (str "textures/asteroid_belt_assault/" tex-name))
 
+(defn sound [sound-name]
+  (str "sounds/asteroid_belt_assault/" sound-name))
+
 (defn init []
   (engine/init {:draw-fn   draw*
                 :update-fn update*
@@ -421,5 +469,7 @@
 
   (make-star-field 200 {:x 0 :y 450 :w 2 :h 2} {:x 0 :y 30})
   (make-asteroids 10 {:x 0 :y 0 :w 50 :h 50} 20)
-  (make-player {:x 0 :y 150 :w 50 :h 50} 3))
+  (make-player {:x 0 :y 150 :w 50 :h 50} 3)
+
+  (swap! context assoc-in [:player :shot-sound] (sound "shot1.wav")))
 
