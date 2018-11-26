@@ -127,8 +127,8 @@
         y' (+ (* x sin-angle) (* y cos-angle))]
     (conj rect x' y')))
 
-(defn rotate-rectangle [x1 y1 x2 y2 angle]
-  (let [angle-rad (* angle (/ Math/PI 180))
+(defn rotate-rectangle [x1 y1 x2 y2 {:keys [angle radians]}]
+  (let [angle-rad (if angle (* angle (/ Math/PI 180)) radians)
         cos-angle (Math/cos angle-rad)
         sin-angle (Math/sin angle-rad)]
     (-> []
@@ -165,7 +165,7 @@
                       :else     [half-width half-height])
 
               vertex-positions (if (= (:type effect) :rotate)
-                                 (rotate-rectangle x1 y1 x2 y2 (:angle effect))
+                                 (rotate-rectangle x1 y1 x2 y2 effect)
                                  [x2 y2
                                   x1 y2
                                   x2 y1

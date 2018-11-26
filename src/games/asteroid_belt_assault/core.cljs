@@ -35,6 +35,16 @@
 (def point-speed-min 15)
 (def point-speed-max 30)
 
+(def player-start-location {:x 390 :y 550})
+(def score-location {:x 20 :y 10})
+(def lives-location {:x 20 :y 25})
+
+(def min-ships-per-wave 5)
+(def max-ships-per-wave 8)
+(def next-wave-min-timer 8)
+(def ship-spawn-wait-timer 0.5)
+(def ship-shot-chance 0.2)
+
 (defn color-mul [color f]
   (mapv (fn [c] (* c f)) color))
 
@@ -132,7 +142,44 @@
     (swap! context assoc :explosion {:texture texture
                                      :piece-rectangles frames
                                      :point-rectangle point-rectangle})))
-    
+
+(defn prepare-enemies [frame-rect frame-count]
+  (let [texture (get-in @context [:textures :sprite-sheet])
+        frames (mapv (fn [x] (update frame-rect :x + (* x (:w frame-rect))))
+                     (range frame-count))]
+    (swap! context assoc :enemy-data {:frames frames
+                                      :collision-radius 15
+                                      :texture texture})
+    (swap! context assoc :path-waypoints [[{:x 850 :y 300}
+                                           {:x -100 :y 300}]
+
+                                          [{:x -50 :y 225}
+                                           {:x 850 :y 225}]
+
+                                          [{:x -100 :y 50}
+                                           {:x 150 :y 50}
+                                           {:x 200 :y 75}
+                                           {:x 200 :y 125}
+                                           {:x 150 :y 150}
+                                           {:x 150 :y 175}
+                                           {:x 200 :y 200}
+                                           {:x 600 :y 200}
+                                           {:x 850 :y 600}]
+
+                                          [{:x 600 :y -100}
+                                           {:x 600 :y 250}
+                                           {:x 580 :y 275}
+                                           {:x 500 :y 250}
+                                           {:x 500 :y 200}
+                                           {:x 450 :y 175}
+                                           {:x 400 :y 150}
+                                           {:x -100 :y 150}]])
+    (swap! context assoc :enemies-active? false)
+    (swap! context assoc :enemies [])
+    (swap! context assoc :wave-spawns {0 0
+                                       1 0
+                                       2 0
+                                       3 0})))
 
 (defn set-sprite-rotation [sprite v]
   (assoc sprite :rotation (mod v 360)))
@@ -148,9 +195,12 @@
                           :height (:frame-height sprite)}
                          rect))
 
-(defn circle-colliding? [{{x1 :x y1 :y} :location radius :collision-radius} {x2 :x y2 :y} other-radius]
-  (let [distance (Math/sqrt (+ (* (- x2 x1) (- x2 x1))
-                               (* (- y2 y1) (- y2 y1))))]
+(defn vector-distance [{x1 :x y1 :y} {x2 :x y2 :y}]
+  (Math/sqrt (+ (* (- x2 x1) (- x2 x1))
+                (* (- y2 y1) (- y2 y1)))))
+
+(defn circle-colliding? [{loc1 :location radius :collision-radius} loc2 other-radius]
+  (let [distance (vector-distance loc1 loc2)]
     (< distance (+ radius other-radius))))
 
 (defn draw-sprite [sprite]
@@ -161,7 +211,7 @@
                                     :tex-coords tex-coords
                                     :origin (sprite-center sprite)}
                              (and rotation (not= rotation 0)) (assoc :effect {:type :rotate
-                                                                              :angle rotation})))))
+                                                                              :radians rotation})))))
 
 (defn update-sprite [sprite elapsed]
   (let [sprite (-> sprite
@@ -529,6 +579,85 @@
                                  (filterv particle-active?))]
     (swap! context assoc :explosion-particles explosion-particles)))
 
+(defn waypoint-reached? [enemy]
+  (< (vector-distance (-> enemy :sprite :location) (:current-waypoint enemy))
+     (/ (-> enemy :sprite :frame-width) 2)))
+
+(defn enemy-active? [enemy]
+  (if (:destroyed? enemy)
+    false
+    (if (> (count (:waypoints enemy)) 0)
+      true
+      (if (waypoint-reached? enemy)
+        false
+        true))))
+
+(defn spawn-enemy [waypoints]
+  (let [enemy-data (:enemy-data @context)]
+    (swap! context update :enemies conj
+           {:sprite (-> sprite
+                        (merge enemy-data)
+                        (assoc :frame-width (-> enemy-data :frames first :w)
+                               :frame-height (-> enemy-data :frames first :h)))
+            :previous-location (first waypoints)
+            :speed 120
+            :waypoints waypoints
+            :current-waypoint (first waypoints)})))
+
+(defn update-wave-spawn [elapsed]
+  (swap! context update :ship-spawn-timer + elapsed)
+  (when (> (:ship-spawn-timer @context) ship-spawn-wait-timer)
+    (doseq [[id count] (:wave-spawns @context)]
+      (when (> count 0)
+        (spawn-enemy (get-in @context [:path-waypoints id]))
+        (swap! context update-in [:wave-spawns id] dec)))
+    (swap! context assoc :ship-spawn-timer 0))
+  (swap! context update :next-wave-timer + elapsed)
+  (when (> (:next-wave-timer @context) next-wave-min-timer)
+    (let [id (rand-int (count (:path-waypoints @context)))]
+      (swap! context assoc-in [:wave-spawns id] (random-int min-ships-per-wave (inc max-ships-per-wave))))
+    (swap! context assoc :next-wave-timer 0)))
+
+(defn update-enemy [enemy elapsed]
+  (if (enemy-active? enemy)
+    (let [heading (-> (vector-sub (:current-waypoint enemy)
+                                  (-> enemy :sprite :location))
+                      (vector-normalize)
+                      (vector-mul (:speed enemy)))
+          previous-location (-> enemy :sprite :location)
+          sprite (-> (:sprite enemy)
+                     (assoc :velocity heading)
+                     (update-sprite elapsed))
+          rotation (Math/atan2 (- (-> sprite :location :y) (:y previous-location))
+                               (- (-> sprite :location :x) (:x previous-location)))
+          sprite (assoc sprite :rotation rotation)
+          enemy (->  enemy
+                     (assoc :previous-location previous-location)
+                     (assoc :sprite sprite))]
+      (if (and (waypoint-reached? enemy) (> (count (:waypoints enemy)) 0))
+        (-> enemy
+            (assoc :current-waypoint (first (:waypoints enemy)))
+            (assoc :waypoints (vec (rest (:waypoints enemy)))))
+        enemy))
+    enemy))
+
+(defn update-enemies [delta]
+  (let [elapsed (* delta 0.001)]
+    (let [enemies (->> (:enemies @context)
+                       (mapv (fn [enemy] (update-enemy enemy elapsed)))
+                       (filterv enemy-active?))]
+      (swap! context assoc :enemies enemies))
+    (when (:enemies-active? @context)
+      (update-wave-spawn elapsed))))
+
+(defn draw-enemy [enemy]
+  (when (enemy-active? enemy)
+    (draw-sprite (:sprite enemy))))
+
+(defn draw-enemies []
+  (doseq [enemy (:enemies @context)]
+    (draw-enemy enemy)))
+
 (defn draw* []
   (let [{:keys [textures state] :as ctx} @context]
     (when (= state :title-screen)
@@ -539,7 +668,7 @@
       (draw-star-field)
       (draw-asteroids)
       (draw-player)
-      ;; m_enemyManager.Draw(m_spriteBatch);
+      (draw-enemies)
       (draw-explosions)
 
       ;; m_spriteBatch.DrawString(m_pericles14,
@@ -562,6 +691,7 @@
     ))
 
 (defn reset-game []
+  (swap! context assoc :enemies-active? true)
   )
 
 (defn update* [delta]
@@ -583,10 +713,9 @@
         (update-star-field delta)
         (update-asteroids delta)
         (update-player delta)
-        ;; m_enemyManager.Update(gameTime);
+        (update-enemies delta)
         (update-explosions delta)
         (check-collisions)
-        ;; m_collisionManager.CheckCollisions();
         
         ;; m_difficultTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
 
@@ -642,6 +771,7 @@
   (make-asteroids 10 {:x 0 :y 0 :w 50 :h 50} 20)
   (make-player {:x 0 :y 150 :w 50 :h 50} 3)
   (prepare-explosion {:x 0 :y 100 :w 50 :h 50} 3 {:x 0 :y 450 :w 2 :h 2})
+  (prepare-enemies {:x 0 :y 200 :w 50 :h 50} 6)
 
   (swap! context assoc-in [:player :shot-sound] (sound "shot1.wav"))
 
