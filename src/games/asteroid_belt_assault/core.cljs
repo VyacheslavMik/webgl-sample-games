@@ -27,6 +27,7 @@
 (def max-piece-count 6)
 (def min-point-count 20)
 (def max-point-count 30)
+(def enemy-gun-offset {:x 25 :y 25})
 
 (def duration-count 120)
 (def explosion-max-speed 30)
@@ -41,9 +42,11 @@
 
 (def min-ships-per-wave 5)
 (def max-ships-per-wave 8)
-(def next-wave-min-timer 8)
 (def ship-spawn-wait-timer 0.5)
-(def ship-shot-chance 0.2)
+
+(def enemy-point-value 100)
+
+(def difficult-increase-time 10)
 
 (defn color-mul [color f]
   (mapv (fn [c] (* c f)) color))
@@ -52,6 +55,8 @@
 (def final-color [0 0 0 0])
 
 (def min-shot-timer 0.2)
+
+(def player-death-delay-time 10)
 
 (defn vector-length [{:keys [x y]}]
   (Math/sqrt (+ (* x x) (* y y))))
@@ -176,6 +181,8 @@
                                            {:x -100 :y 150}]])
     (swap! context assoc :enemies-active? false)
     (swap! context assoc :enemies [])
+    (swap! context assoc :ship-shot-chance 0.2)
+    (swap! context assoc :next-wave-min-timer 8)
     (swap! context assoc :wave-spawns {0 0
                                        1 0
                                        2 0
@@ -411,6 +418,16 @@
                                     {:x 0 :y -1}
                                     250))))
 
+(defn enemy-fire-shot [enemy]
+  (engine/play-sound (:enemy-shot-sound @context))
+  (let [player-center (sprite-center (get-in @context [:player :sprite]))
+        fire-loc (-> enemy :sprite :location
+                     (vector-add enemy-gun-offset))
+        shot-direction (-> (vector-sub player-center fire-loc)
+                           (vector-normalize))]
+    (swap! context update :enemy-shots conj
+           (new-shot fire-loc shot-direction 150))))
+
 (defn update-shots [shots elapsed]
   (->> shots
        (mapv (fn [shot] (update-sprite shot elapsed)))
@@ -529,11 +546,52 @@
           (swap! context assoc-in [:player :destroyed?] true)
           (add-explosion (-> player :sprite sprite-center) {:x 0 :y 0}))))))
 
+(defn check-shot-to-enemy-collisions []
+  (let [shots (get-in @context [:player :shots])
+        enemies (:enemies @context)]
+    (doseq [i (range (count shots))]
+      (let [shot (get shots i)]
+        (doseq [j (range (count enemies))]
+          (let [enemy (get enemies j)]
+            (when (circle-colliding? shot (sprite-center (:sprite enemy)) (-> enemy :sprite :collision-radius))
+              (swap! context assoc-in [:player :shots i :location] off-screen)
+              (swap! context assoc-in [:enemies j :destroyed?] true)
+              (swap! context update-in [:player :score] + enemy-point-value)
+              (add-explosion (sprite-center (:sprite enemy))
+                             (vector-div (-> enemy :sprite :velocity) 10)))))))))
+
+(defn check-shot-to-player-collisions []
+  (let [player (:player @context)
+        shots (:enemy-shots @context)]
+    (doseq [i (range (count shots))]
+      (let [shot (get shots i)]
+        (when (circle-colliding? shot (sprite-center (:sprite player)) (-> player :sprite :collision-radius))
+          (swap! context assoc-in [:enemy-shots i :location] off-screen)
+          (swap! context assoc-in [:player :destroyed?] true)
+          (add-explosion (sprite-center (:sprite player)) {:x 0 :y 0}))))))
+
+(defn check-enemy-to-player-collisions []
+  (let [player (:player @context)
+        enemies (:enemies @context)]
+    (doseq [i (range (count enemies))]
+      (let [enemy (get enemies i)]
+        (when (circle-colliding? (:sprite enemy)
+                                 (sprite-center (:sprite player))
+                                 (-> player :sprite :collision-radius))
+          (swap! context assoc-in [:enemies i :destroyed?] true)
+          (add-explosion (sprite-center (:sprite enemy))
+                         (-> enemy :sprite :velocity
+                             (vector-div 10)))
+          (swap! context assoc-in [:player :destroyed?] true)
+          (add-explosion (sprite-center (:sprite player)) {:x 0 :y 0}))))))
+
 (defn check-collisions []
+  (check-shot-to-enemy-collisions)
   (check-shot-to-asteroid-collisions)
   (when-not (get-in @context [:player :destroyed?])
-    (check-asteroid-to-player-collisions)
-    ))
+    (check-shot-to-player-collisions)
+    (check-enemy-to-player-collisions)
+    (check-asteroid-to-player-collisions)))
 
 (defn particle-active? [particle]
   (> (:remaining-duration particle) 0))
@@ -613,7 +671,7 @@
         (swap! context update-in [:wave-spawns id] dec)))
     (swap! context assoc :ship-spawn-timer 0))
   (swap! context update :next-wave-timer + elapsed)
-  (when (> (:next-wave-timer @context) next-wave-min-timer)
+  (when (> (:next-wave-timer @context) (:next-wave-min-timer @context))
     (let [id (rand-int (count (:path-waypoints @context)))]
       (swap! context assoc-in [:wave-spawns id] (random-int min-ships-per-wave (inc max-ships-per-wave))))
     (swap! context assoc :next-wave-timer 0)))
@@ -642,11 +700,18 @@
     enemy))
 
 (defn update-enemies [delta]
-  (let [elapsed (* delta 0.001)]
+  (let [elapsed (* delta 0.001)
+        ship-shot-chance (:ship-shot-chance @context)]
+    (swap! context update :enemy-shots
+           (fn [shots] (update-shots shots elapsed)))
     (let [enemies (->> (:enemies @context)
                        (mapv (fn [enemy] (update-enemy enemy elapsed)))
                        (filterv enemy-active?))]
-      (swap! context assoc :enemies enemies))
+      (swap! context assoc :enemies enemies)
+      (when-not (get-in @context [:player :destroyed?])
+        (doseq [enemy enemies]
+          (when (<= (/ (rand-int 1000) 10) ship-shot-chance)
+            (enemy-fire-shot enemy)))))
     (when (:enemies-active? @context)
       (update-wave-spawn elapsed))))
 
@@ -655,11 +720,13 @@
     (draw-sprite (:sprite enemy))))
 
 (defn draw-enemies []
+  (doseq [shot (:enemy-shots @context)]
+    (draw-sprite shot))
   (doseq [enemy (:enemies @context)]
     (draw-enemy enemy)))
 
 (defn draw* []
-  (let [{:keys [textures state] :as ctx} @context]
+  (let [{:keys [textures state player] :as ctx} @context]
     (when (= state :title-screen)
       (engine/draw-rectangle
        {:texture (:title-screen textures)}))
@@ -671,28 +738,40 @@
       (draw-enemies)
       (draw-explosions)
 
-      ;; m_spriteBatch.DrawString(m_pericles14,
-      ;;                          "Score: " + m_playerManager.PlayerScore.ToString(),
-      ;;                          m_scoreLocation,
-      ;;                          Color.White);
-
-      ;; if (m_playerManager.LivesRemaining >= 0)
-      ;; {
-      ;;  m_spriteBatch.DrawString(m_pericles14,
-      ;;                           "Ships Remaining: " + m_playerManager.LivesRemaining.ToString(),
-      ;;                           m_livesLocation,
-      ;;                           Color.White);
-      ;;  }
-      )
+      (engine/draw-text {:align :start
+                         :text (str "Score: " (:score player))
+                         :position score-location})
+      (when (>= (:lives-remaining player) 0)
+        (engine/draw-text {:align :start
+                           :text (str "Ships Remaining: " (:lives-remaining player))
+                           :position lives-location})))
 
     (when (= state :game-over)
-      )
-
-    ))
+      (engine/draw-text {:text "G A M E  O V E R !"
+                         :position {:x (/ screen-width 2) :y (/ screen-height 2)}}))))
 
 (defn reset-game []
+  (swap! context assoc-in [:player :sprite :location] player-start-location)
+  (swap! context update :asteroids
+         (fn [asteroids]
+           (mapv (fn [asteroid]
+                   (assoc asteroid :location {:x -500 :y -500}))
+                 asteroids)))
+  (swap! context assoc :enemies [])
   (swap! context assoc :enemies-active? true)
-  )
+  (swap! context assoc-in [:player :shots] [])
+  (swap! context assoc :enemy-shots [])
+  (swap! context assoc-in [:player :destroyed?] false))
+
+(defn increase-difficult []
+  (when (<= (:ship-shot-chance @context) 1)
+    (swap! context update :ship-shot-chance + 0.05))
+  (when (>= (:next-wave-min-timer @context) 4)
+    (swap! context update :next-wave-min-timer - 0.5)))
+
+(defn reset-difficult []
+  (swap! context assoc :ship-shot-chance 0.2)
+  (swap! context assoc :next-wave-min-timer 8))
 
 (defn update* [delta]
   (let [{:keys [state]} @context]
@@ -704,7 +783,7 @@
                    (or (engine/key-pressed? :Space) (engine/get-touch-state)))
           (swap! context assoc-in [:player :lives-remaining] player-starting-lives)
           (swap! context assoc-in [:player :score] 0)
-          ;; m_enemyManager.ResetDifficult();
+          (reset-difficult)
           (reset-game)
           (swap! context assoc :state :playing)))
 
@@ -716,42 +795,48 @@
         (update-enemies delta)
         (update-explosions delta)
         (check-collisions)
-        
-        ;; m_difficultTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
 
-        ;; if (m_difficultTimer >= m_difficultIncreaseTime)
-        ;; {
-        ;;     m_enemyManager.IncreaseDifficult();
-        ;;     m_difficultTimer = 0f;
-        ;; }
+        (swap! context update :difficult-timer + (* delta 0.001))
 
-        ;; if (m_playerManager.Destoyed)
-        ;; {
-        ;;     m_playerDeathTimer = 0f;
-        ;;     m_enemyManager.Active = false;
-        ;;     m_playerManager.LivesRemaining--;
+        (when (>= (:difficult-timer @context) difficult-increase-time)
+          (increase-difficult)
+          (swap! context assoc :difficult-timer 0))
 
-        ;;     if (m_playerManager.LivesRemaining < 0)
-        ;;     {
-        ;;         m_gameState = GameStates.GameOver;
-        ;;     }
-        ;;     else
-        ;;     {
-        ;;         m_gameState = GameStates.PlayerDead;
-        ;;     }
-        ;; }
-        ;; break;
+        (when (get-in @context [:player :destroyed?])
+          (swap! context assoc :player-death-timer 0)
+          (swap! context assoc :enemies-active? false)
+          (swap! context update-in [:player :lives-remaining] dec)
 
-        )
+          (if (< (get-in @context [:player :lives-remaining]) 0)
+            (swap! context assoc :state :game-over)
+            (swap! context assoc :state :player-dead))))
 
       :player-dead
-      (do)
+      (do
+        (swap! context update :player-death-timer + (* delta 0.001))
+        (update-star-field delta)
+        (update-asteroids delta)
+        (update-enemies delta)
+        (update-player delta)
+        (update-explosions delta)
+
+        (when (>= (:player-death-timer @context) player-death-delay-time)
+          (reset-game)
+          (swap! context assoc :state :playing)))
 
       :game-over
-      (do)
+      (do
+        (swap! context update :player-death-timer + (* delta 0.001))
+        (update-star-field delta)
+        (update-asteroids delta)
+        (update-enemies delta)
+        (update-player delta)
+        (update-explosions delta)
 
-      nil))
-  )
+        (when (>= (:player-death-timer @context) player-death-delay-time)
+          (swap! context assoc :state :title-screen)))
+
+      nil)))
 
 (defn texture [tex-name]
   (str "textures/asteroid_belt_assault/" tex-name))
@@ -774,6 +859,9 @@
   (prepare-enemies {:x 0 :y 200 :w 50 :h 50} 6)
 
   (swap! context assoc-in [:player :shot-sound] (sound "shot1.wav"))
+  (swap! context assoc :enemy-shot-sound (sound "shot2.wav"))
+
+  (swap! context assoc :difficult-timer 0)
 
   (swap! context assoc-in [:explosion-sounds] (mapv (fn [i] (sound (str "explosion" i ".wav")))
                                                     (range 1 5))))
