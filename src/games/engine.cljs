@@ -122,30 +122,23 @@
     (set! (.-textBaseline ctx) "middle")
     (.fillText ctx text x y)))
 
-(defn rotate-point [rect x y cos-angle sin-angle]
+(defn draw-rectangle [rectangle]
+  (swap! context update :rectangles conj! rectangle))
+
+(defn rotate-point [rect x y cos-angle sin-angle dx dy]
   (let [x' (- (* x cos-angle) (* y sin-angle))
         y' (+ (* x sin-angle) (* y cos-angle))]
-    (conj rect x' y')))
+    (conj! rect (+ x' dx) (+ y' dy))))
 
-(defn rotate-rectangle [x1 y1 x2 y2 {:keys [angle radians]}]
-  (let [angle-rad (if angle (* angle (/ Math/PI 180)) radians)
-        cos-angle (Math/cos angle-rad)
-        sin-angle (Math/sin angle-rad)]
-    (-> []
-        (rotate-point x2 y2 cos-angle sin-angle)
-        (rotate-point x1 y2 cos-angle sin-angle)
-        (rotate-point x2 y1 cos-angle sin-angle)
-        (rotate-point x1 y2 cos-angle sin-angle)
-        (rotate-point x2 y1 cos-angle sin-angle)
-        (rotate-point x1 y1 cos-angle sin-angle))))
-
-(defn draw-rectangle [rectangle]
-  (swap! context update :rectangles conj rectangle))
+(defn add-vertex [arr rotate? x y cos sin dx dy]
+  (if rotate?
+    (rotate-point arr x y cos sin dx dy)
+    (conj! arr (+ x dx) (+ y dy))))
 
 (defn prepare-data [{:keys [textures]} rectangles]
   (when (> (count rectangles) 0)
     (loop [[{:keys [color effect origin position size texture tex-coords]} & rest :as rectangles] rectangles
-           data     []
+           data     (transient [])
            prev-tex texture]
       (if (and (= prev-tex texture) rectangles)
         (let [tex-size (get textures texture)
@@ -156,62 +149,86 @@
               half-height (/ (:height size) 2)
               half-width  (/ (:width size) 2)
 
-              x1 (- half-width)  x2 half-width
-              y1 (- half-height) y2 half-height
+              vx1 (- half-width)  vx2 half-width
+              vy1 (- half-height) vy2 half-height
+
+              rotate? (= (:type effect) :rotate)
+              angle   (:angle effect)
+              radians (:radians effect)
+
+              angle-rad (when rotate? (if angle (* angle (/ Math/PI 180)) radians))
+              cos (when rotate? (Math/cos angle-rad))
+              sin (when rotate? (Math/sin angle-rad))
 
               [x y] (cond
                       origin   [(:x origin) (:y origin)]
                       position [(+ (:x position) half-width) (+ (:y position) half-height)]
                       :else     [half-width half-height])
-
-              vertex-positions (if (= (:type effect) :rotate)
-                                 (rotate-rectangle x1 y1 x2 y2 effect)
-                                 [x2 y2
-                                  x1 y2
-                                  x2 y1
-                                  x1 y2
-                                  x2 y1
-                                  x1 y1])
               
-              texture-coordinates (let [[x1 x2 y1 y2]
-                                        (if (and tex-coords tex-size)
-                                          (let [{:keys [x y w h]} tex-coords
-                                                {:keys [width height]} tex-size
-                                                x2 (/ (+ x w) width)
-                                                y2 (/ (+ y h) height)
-                                                x1 (/ x width)
-                                                y1 (/ y height)]
-                                            [x1 x2 y1 y2])
-                                          [0 1 0 1])]
-                                    (if (= (:type effect) :flip)
-                                      [x1 y2
-                                       x2 y2
-                                       x1 y1
-                                       x2 y2
-                                       x1 y1
-                                       x2 y1]
-                                      [x2 y2
-                                       x1 y2
-                                       x2 y1
-                                       x1 y2
-                                       x2 y1
-                                       x1 y1]))
-              color (or color color-white)]
-          (recur rest
-                 (loop [[vx vy & vs] vertex-positions
-                        [r g b a]    color
-                        [tx ty & ts] texture-coordinates
-                        res data]
-                   (if (and vx vy)
-                     (recur vs color ts
-                            (conj res
-                                  (+ vx x) (+ vy y)
-                                  r g b a
-                                  tx ty))
-                     res))
-                 texture))
+              [r g b a] (or color color-white)
+
+              [tx1 tx2 ty1 ty2] (if (and tex-coords tex-size)
+                                  (let [{:keys [x y w h]} tex-coords
+                                        {:keys [width height]} tex-size
+                                        x2 (/ (+ x w) width)
+                                        y2 (/ (+ y h) height)
+                                        x1 (/ x width)
+                                        y1 (/ y height)]
+                                    [x1 x2 y1 y2])
+                                  [0 1 0 1])
+
+              flip? (= (:type effect) :flip)
+
+              ;; v1
+              data (-> data
+                       (add-vertex rotate? vx2 vy2 cos sin x y)
+                       (conj! r g b a))
+              data (if flip?
+                     (conj! data tx1 ty2)
+                     (conj! data tx2 ty2))
+
+              ;; v2
+              data (-> data
+                       (add-vertex rotate? vx1 vy2 cos sin x y)
+                       (conj! r g b a))
+              data (if flip?
+                     (conj! data tx2 ty2)
+                     (conj! data tx1 ty2))
+
+              ;; v3
+              data (-> data
+                       (add-vertex rotate? vx2 vy1 cos sin x y)
+                       (conj! r g b a))
+              data (if flip?
+                     (conj! data tx1 ty1)
+                     (conj! data tx2 ty1))
+
+              ;; v4
+              data (-> data
+                       (add-vertex rotate? vx1 vy2 cos sin x y)
+                       (conj! r g b a))
+              data (if flip?
+                     (conj! data tx2 ty2)
+                     (conj! data tx1 ty2))
+
+              ;; v5
+              data (-> data
+                       (add-vertex rotate? vx2 vy1 cos sin x y)
+                       (conj! r g b a))
+              data (if flip?
+                     (conj! data tx1 ty1)
+                     (conj! data tx2 ty1))
+
+              ;; v6
+              data (-> data
+                       (add-vertex rotate? vx1 vy1 cos sin x y)
+                       (conj! r g b a))
+              data (if flip?
+                     (conj! data tx2 ty1)
+                     (conj! data tx1 ty1))]
+          (recur rest data texture))
         (when (and (> (count data) 0) prev-tex)
-          {:data       data
+          {:data       (persistent! data)
            :texture    prev-tex
            :rectangles rectangles})))))
 
@@ -253,7 +270,7 @@
                        projection-matrix)
     (when draw-fn
       (draw-fn)
-      (loop [data (prepare-data ctx (:rectangles @context))]
+      (loop [data (prepare-data ctx (persistent! (:rectangles @context)))]
         (when data
           (prepare-buffer ctx (:data data))
 
@@ -359,14 +376,25 @@
   (when fps-div
     (set! (.-textContent fps-div) (Math/floor (/ 1000 delta)))))
 
+(def measure-time false)
+
 (defn render [now]
   (when-let [{:keys [fps-div update-fn]} @context]
     (let [delta (- now @then)]
       (show-fps fps-div delta)
       (reset! then now)
-      (when update-fn (update-fn delta))
-      (swap! context assoc :rectangles [])
-      (draw)
+      (if measure-time
+        (do
+          (print "Update ")
+          (time
+           (when update-fn (update-fn delta))))
+        (when update-fn (update-fn delta)))
+      (swap! context assoc :rectangles (transient []))
+      (if measure-time
+        (do
+          (print "Draw ")
+          (time (draw)))
+        (draw))
       (js/requestAnimationFrame render))))
 
 (defn run []
