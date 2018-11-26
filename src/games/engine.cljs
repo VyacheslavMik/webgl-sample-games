@@ -136,101 +136,100 @@
     (conj! arr (+ x dx) (+ y dy))))
 
 (defn prepare-data [{:keys [textures]} rectangles]
-  (when (> (count rectangles) 0)
-    (loop [[{:keys [color effect origin position size texture tex-coords]} & rest :as rectangles] rectangles
-           data     (transient [])
-           prev-tex texture]
-      (if (and (= prev-tex texture) rectangles)
-        (let [tex-size (get textures texture)
-              size (or size
-                       (and tex-coords {:width (:w tex-coords)
-                                        :height (:h tex-coords)})
-                       tex-size)
-              half-height (/ (:height size) 2)
-              half-width  (/ (:width size) 2)
+  (loop [[{:keys [color effect origin position size texture tex-coords]} & rest :as rectangles] rectangles
+         data     (transient [])
+         prev-tex texture]
+    (if (and (= prev-tex texture) rectangles)
+      (let [tex-size (get textures texture)
+            size (or size
+                     (and tex-coords {:width (:w tex-coords)
+                                      :height (:h tex-coords)})
+                     tex-size)
+            half-height (/ (:height size) 2)
+            half-width  (/ (:width size) 2)
 
-              vx1 (- half-width)  vx2 half-width
-              vy1 (- half-height) vy2 half-height
+            vx1 (- half-width)  vx2 half-width
+            vy1 (- half-height) vy2 half-height
 
-              rotate? (= (:type effect) :rotate)
-              angle   (:angle effect)
-              radians (:radians effect)
+            rotate? (= (:type effect) :rotate)
+            angle   (:angle effect)
+            radians (:radians effect)
 
-              angle-rad (when rotate? (if angle (* angle (/ Math/PI 180)) radians))
-              cos (when rotate? (Math/cos angle-rad))
-              sin (when rotate? (Math/sin angle-rad))
+            angle-rad (when rotate? (if angle (* angle (/ Math/PI 180)) radians))
+            cos (when rotate? (Math/cos angle-rad))
+            sin (when rotate? (Math/sin angle-rad))
 
-              [x y] (cond
-                      origin   [(:x origin) (:y origin)]
-                      position [(+ (:x position) half-width) (+ (:y position) half-height)]
-                      :else     [half-width half-height])
-              
-              [r g b a] (or color color-white)
+            [x y] (cond
+                    origin   [(:x origin) (:y origin)]
+                    position [(+ (:x position) half-width) (+ (:y position) half-height)]
+                    :else     [half-width half-height])
+            
+            [r g b a] (or color color-white)
 
-              [tx1 tx2 ty1 ty2] (if (and tex-coords tex-size)
-                                  (let [{:keys [x y w h]} tex-coords
-                                        {:keys [width height]} tex-size
-                                        x2 (/ (+ x w) width)
-                                        y2 (/ (+ y h) height)
-                                        x1 (/ x width)
-                                        y1 (/ y height)]
-                                    [x1 x2 y1 y2])
-                                  [0 1 0 1])
+            [tx1 tx2 ty1 ty2] (if (and tex-coords tex-size)
+                                (let [{:keys [x y w h]} tex-coords
+                                      {:keys [width height]} tex-size
+                                      x2 (/ (+ x w) width)
+                                      y2 (/ (+ y h) height)
+                                      x1 (/ x width)
+                                      y1 (/ y height)]
+                                  [x1 x2 y1 y2])
+                                [0 1 0 1])
 
-              flip? (= (:type effect) :flip)
+            flip? (= (:type effect) :flip)
 
-              ;; v1
-              data (-> data
-                       (add-vertex rotate? vx2 vy2 cos sin x y)
-                       (conj! r g b a))
-              data (if flip?
-                     (conj! data tx1 ty2)
-                     (conj! data tx2 ty2))
+            ;; v1
+            data (-> data
+                     (add-vertex rotate? vx2 vy2 cos sin x y)
+                     (conj! r g b a))
+            data (if flip?
+                   (conj! data tx1 ty2)
+                   (conj! data tx2 ty2))
 
-              ;; v2
-              data (-> data
-                       (add-vertex rotate? vx1 vy2 cos sin x y)
-                       (conj! r g b a))
-              data (if flip?
-                     (conj! data tx2 ty2)
-                     (conj! data tx1 ty2))
+            ;; v2
+            data (-> data
+                     (add-vertex rotate? vx1 vy2 cos sin x y)
+                     (conj! r g b a))
+            data (if flip?
+                   (conj! data tx2 ty2)
+                   (conj! data tx1 ty2))
 
-              ;; v3
-              data (-> data
-                       (add-vertex rotate? vx2 vy1 cos sin x y)
-                       (conj! r g b a))
-              data (if flip?
-                     (conj! data tx1 ty1)
-                     (conj! data tx2 ty1))
+            ;; v3
+            data (-> data
+                     (add-vertex rotate? vx2 vy1 cos sin x y)
+                     (conj! r g b a))
+            data (if flip?
+                   (conj! data tx1 ty1)
+                   (conj! data tx2 ty1))
 
-              ;; v4
-              data (-> data
-                       (add-vertex rotate? vx1 vy2 cos sin x y)
-                       (conj! r g b a))
-              data (if flip?
-                     (conj! data tx2 ty2)
-                     (conj! data tx1 ty2))
+            ;; v4
+            data (-> data
+                     (add-vertex rotate? vx1 vy2 cos sin x y)
+                     (conj! r g b a))
+            data (if flip?
+                   (conj! data tx2 ty2)
+                   (conj! data tx1 ty2))
 
-              ;; v5
-              data (-> data
-                       (add-vertex rotate? vx2 vy1 cos sin x y)
-                       (conj! r g b a))
-              data (if flip?
-                     (conj! data tx1 ty1)
-                     (conj! data tx2 ty1))
+            ;; v5
+            data (-> data
+                     (add-vertex rotate? vx2 vy1 cos sin x y)
+                     (conj! r g b a))
+            data (if flip?
+                   (conj! data tx1 ty1)
+                   (conj! data tx2 ty1))
 
-              ;; v6
-              data (-> data
-                       (add-vertex rotate? vx1 vy1 cos sin x y)
-                       (conj! r g b a))
-              data (if flip?
-                     (conj! data tx2 ty1)
-                     (conj! data tx1 ty1))]
-          (recur rest data texture))
-        (when (and (> (count data) 0) prev-tex)
-          {:data       (persistent! data)
-           :texture    prev-tex
-           :rectangles rectangles})))))
+            ;; v6
+            data (-> data
+                     (add-vertex rotate? vx1 vy1 cos sin x y)
+                     (conj! r g b a))
+            data (if flip?
+                   (conj! data tx2 ty1)
+                   (conj! data tx1 ty1))]
+        (recur rest data texture))
+      (when (and (> (count data) 0) prev-tex)
+        {:data       (persistent! data)
+         :texture    prev-tex
+         :rectangles rectangles}))))
 
 (defn prepare-vertex-attrib [{:keys [gl program-info]} k num-components stride offset]
   (let [type (.-FLOAT gl)
@@ -271,14 +270,15 @@
     (when draw-fn
       (draw-fn)
       (loop [data (prepare-data ctx (persistent! (:rectangles @context)))]
-        (when data
-          (prepare-buffer ctx (:data data))
+        (prepare-buffer ctx (:data data))
 
-          (.activeTexture gl (.-TEXTURE0 gl))
-          (.bindTexture gl (.-TEXTURE_2D gl) (:texture data))
-          (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
-          (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> data :data count) 8))
-          (recur (prepare-data ctx (:rectangles data))))))))
+        (.activeTexture gl (.-TEXTURE0 gl))
+        (.bindTexture gl (.-TEXTURE_2D gl) (:texture data))
+        (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
+        (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> data :data count) 8))
+        (when-let [rectangles (:rectangles data)]
+          (when (> (count rectangles) 0)
+            (recur (prepare-data ctx rectangles))))))))
 
 (defn handle-key-down [ev]
   (swap! context update :pressed-keys conj (keyword (.-code ev))))

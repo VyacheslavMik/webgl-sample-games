@@ -499,19 +499,16 @@
           (swap! context assoc :time-since-last-input 0)
           (swap! context assoc :state :playing)))
 
-      nil))
-  )
+      nil)))
 
 (defn texture [tex-name]
   (str "textures/flood_control/" tex-name))
 
-(defn run []
+(defn init []
   (engine/init {:draw-fn   draw*
                 :update-fn update*
                 :show-fps? true})
 
   (swap! context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
   (swap! context assoc-in [:textures :background]   (engine/load-texture (texture "background.png")))
-  (swap! context assoc-in [:textures :tile-sheet]   (engine/load-texture (texture "tile_sheet.png")))
-
-  (engine/run))
+  (swap! context assoc-in [:textures :tile-sheet]   (engine/load-texture (texture "tile_sheet.png"))))
