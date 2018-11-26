@@ -34,10 +34,13 @@
       left: 0;
       top: 0;
       }
+
+      #tools {
+      display: flex;
+      }
     </style>
   </head>
-  <body>
-    <div id="fps"></div>
+  <body onload="games.core.start()">
     <div id="container">
       <canvas id="glCanvas" width="800" height="600"></canvas>
       <canvas id="textCanvas" width="800" height="600" tabindex="1"></canvas>
