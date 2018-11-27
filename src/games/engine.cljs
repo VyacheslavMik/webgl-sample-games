@@ -270,15 +270,16 @@
     (when draw-fn
       (draw-fn)
       (loop [data (prepare-data ctx (persistent! (:rectangles @context)))]
-        (prepare-buffer ctx (:data data))
+        (when (> (count data) 0)
+          (prepare-buffer ctx (:data data))
 
-        (.activeTexture gl (.-TEXTURE0 gl))
-        (.bindTexture gl (.-TEXTURE_2D gl) (:texture data))
-        (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
-        (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> data :data count) 8))
-        (when-let [rectangles (:rectangles data)]
-          (when (> (count rectangles) 0)
-            (recur (prepare-data ctx rectangles))))))))
+          (.activeTexture gl (.-TEXTURE0 gl))
+          (.bindTexture gl (.-TEXTURE_2D gl) (:texture data))
+          (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
+          (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> data :data count) 8))
+          (when-let [rectangles (:rectangles data)]
+            (when (> (count rectangles) 0)
+              (recur (prepare-data ctx rectangles)))))))))
 
 (defn handle-key-down [ev]
   (swap! context update :pressed-keys conj (keyword (.-code ev))))
