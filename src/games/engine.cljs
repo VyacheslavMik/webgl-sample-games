@@ -122,22 +122,24 @@
     (set! (.-textBaseline ctx) "middle")
     (.fillText ctx text x y)))
 
+(def draw-rectangle-invoke (atom 0))
 (defn draw-rectangle [rectangle]
+  (swap! draw-rectangle-invoke inc)
   (swap! context update :rectangles conj! rectangle))
 
-(defn rotate-point [rect x y cos-angle sin-angle dx dy]
+(defn rotate-point [arr x y cos-angle sin-angle dx dy]
   (let [x' (- (* x cos-angle) (* y sin-angle))
         y' (+ (* x sin-angle) (* y cos-angle))]
-    (conj! rect (+ x' dx) (+ y' dy))))
+    (.push arr (+ x' dx) (+ y' dy))))
 
 (defn add-vertex [arr rotate? x y cos sin dx dy]
   (if rotate?
     (rotate-point arr x y cos sin dx dy)
-    (conj! arr (+ x dx) (+ y dy))))
+    (.push arr (+ x dx) (+ y dy))))
 
 (defn prepare-data [{:keys [textures]} rectangles]
   (loop [[{:keys [color effect origin position size texture tex-coords]} & rest :as rectangles] rectangles
-         data     (transient [])
+         data     (array)
          prev-tex texture]
     (if (and (= prev-tex texture) rectangles)
       (let [tex-size (get textures texture)
@@ -176,58 +178,52 @@
                                   [x1 x2 y1 y2])
                                 [0 1 0 1])
 
-            flip? (= (:type effect) :flip)
+            flip? (= (:type effect) :flip)]
+        ;; v1
+        (add-vertex data rotate? vx2 vy2 cos sin x y)
+        (.push data r g b a)
+        (if flip?
+          (.push data tx1 ty2)
+          (.push data tx2 ty2))
 
-            ;; v1
-            data (-> data
-                     (add-vertex rotate? vx2 vy2 cos sin x y)
-                     (conj! r g b a))
-            data (if flip?
-                   (conj! data tx1 ty2)
-                   (conj! data tx2 ty2))
+        ;; v2
+        (add-vertex data rotate? vx1 vy2 cos sin x y)
+        (.push data r g b a)
+        (if flip?
+          (.push data tx2 ty2)
+          (.push data tx1 ty2))
 
-            ;; v2
-            data (-> data
-                     (add-vertex rotate? vx1 vy2 cos sin x y)
-                     (conj! r g b a))
-            data (if flip?
-                   (conj! data tx2 ty2)
-                   (conj! data tx1 ty2))
+        ;; v3
+        (add-vertex data rotate? vx2 vy1 cos sin x y)
+        (.push data r g b a)
+        (if flip?
+          (.push data tx1 ty1)
+          (.push data tx2 ty1))
 
-            ;; v3
-            data (-> data
-                     (add-vertex rotate? vx2 vy1 cos sin x y)
-                     (conj! r g b a))
-            data (if flip?
-                   (conj! data tx1 ty1)
-                   (conj! data tx2 ty1))
+        ;; v4
+        (add-vertex data rotate? vx1 vy2 cos sin x y)
+        (.push data r g b a)
+        (if flip?
+          (.push data tx2 ty2)
+          (.push data tx1 ty2))
+        
+        ;; v5
+        (add-vertex data rotate? vx2 vy1 cos sin x y)
+        (.push data r g b a)
+        (if flip?
+          (.push data tx1 ty1)
+          (.push data tx2 ty1))
 
-            ;; v4
-            data (-> data
-                     (add-vertex rotate? vx1 vy2 cos sin x y)
-                     (conj! r g b a))
-            data (if flip?
-                   (conj! data tx2 ty2)
-                   (conj! data tx1 ty2))
+        ;; v6
+        (add-vertex data rotate? vx1 vy1 cos sin x y)
+        (.push data r g b a)
+        (if flip?
+          (.push data tx2 ty1)
+          (.push data tx1 ty1))
 
-            ;; v5
-            data (-> data
-                     (add-vertex rotate? vx2 vy1 cos sin x y)
-                     (conj! r g b a))
-            data (if flip?
-                   (conj! data tx1 ty1)
-                   (conj! data tx2 ty1))
-
-            ;; v6
-            data (-> data
-                     (add-vertex rotate? vx1 vy1 cos sin x y)
-                     (conj! r g b a))
-            data (if flip?
-                   (conj! data tx2 ty1)
-                   (conj! data tx1 ty1))]
         (recur rest data texture))
       (when (and (> (count data) 0) prev-tex)
-        {:data       (persistent! data)
+        {:data       data
          :texture    prev-tex
          :rectangles rectangles}))))
 
@@ -268,16 +264,18 @@
                        false
                        projection-matrix)
     (when draw-fn
+      (reset! draw-rectangle-invoke 0)
       (draw-fn)
-      (loop [data (prepare-data ctx (persistent! (:rectangles @context)))]
-        (when (> (count data) 0)
-          (prepare-buffer ctx (:data data))
+      (loop [res (prepare-data ctx (persistent! (:rectangles @context)))]
+        (when (> (count (:data res)) 0)
+          #_(println @draw-rectangle-invoke (count (:data res)))
+          (prepare-buffer ctx (:data res))
 
           (.activeTexture gl (.-TEXTURE0 gl))
-          (.bindTexture gl (.-TEXTURE_2D gl) (:texture data))
+          (.bindTexture gl (.-TEXTURE_2D gl) (:texture res))
           (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
-          (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> data :data count) 8))
-          (when-let [rectangles (:rectangles data)]
+          (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> res :data count) 8))
+          (when-let [rectangles (:rectangles res)]
             (when (> (count rectangles) 0)
               (recur (prepare-data ctx rectangles)))))))))
 

@@ -3,9 +3,8 @@
             [games.robot-rampage.storage :as s]
             [games.robot-rampage.game-manager :as game-manager]
             [games.robot-rampage.camera :as camera]
+            [games.robot-rampage.player :as player]
             [games.robot-rampage.tile-map :as tile-map]))
-
-(swap! s/context assoc :state :title-screen)
 
 (defn draw* []
   (let [{:keys [textures state player] :as ctx} @s/context]
@@ -15,12 +14,14 @@
         :size {:width 800 :height 600}}))
 
     (when (#{:playing :wave-complete :game-over} state)
-      (tile-map/draw*))
+      (tile-map/draw*)
+      (player/draw*))
 
     (when (= state :game-over))))
 
 (defn update* [delta]
-  (let [{:keys [state]} @s/context]
+  (let [{:keys [state]} @s/context
+        elapsed (* delta 0.001)]
     (case state
       :title-screen
       (do
@@ -29,7 +30,8 @@
           (swap! s/context assoc :state :playing)))
 
       :playing
-      (do)
+      (do
+        (player/update* elapsed))
 
       :player-dead
       (do)
@@ -49,6 +51,8 @@
   (engine/init {:draw-fn   draw*
                 :update-fn update*})
 
+  (swap! s/context assoc :state :title-screen)
+
   (swap! s/context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
   (swap! s/context assoc-in [:textures :sprite-sheet] (engine/load-texture (texture "sprite_sheet.png")))
 
@@ -59,5 +63,6 @@
   (swap! s/context assoc-in [:explosion-sounds] (mapv (fn [i] (sound (str "explosion" i ".wav")))
                                                       (range 1 5)))
 
+  (player/init)
   (camera/init)
   (tile-map/init))

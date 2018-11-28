@@ -5,7 +5,6 @@
 (defn init []
   (swap! s/context assoc :camera
          {:position {:x 0 :y 0}
-          :view-port-size {:x 0 :y 0}
           :view-port-width 800
           :view-port-height 600
           :world-rectangle {:x 0 :y 0 :width 1600 :height 1600}}))
@@ -23,3 +22,25 @@
 
 (defn view-port-width  [] (get-in @s/context [:camera :view-port-width]))
 (defn view-port-height [] (get-in @s/context [:camera :view-port-height]))
+
+(defn view-port []
+  (let [cam (:camera @s/context)]
+    (assoc (:position cam)
+           :width (:view-port-width cam)
+           :height (:view-port-height cam))))
+
+(defn object-visible? [bounds]
+  (u/rectangle-intersects? (view-port) bounds))
+
+(defn world-rectangle []
+  (get-in @s/context [:camera :world-rectangle]))
+
+(defn move [offset]
+  (let [{:keys [position world-rectangle view-port-width view-port-height]} (:camera @s/context)
+        position {:x (u/clamp (+ (:x position) (:x offset))
+                              (:x world-rectangle)
+                              (- (:width world-rectangle) view-port-width))
+                  :y (u/clamp (+ (:y position) (:y offset))
+                              (:y world-rectangle)
+                              (- (:height world-rectangle) view-port-height))}]
+    (swap! s/context assoc-in [:camera :position] position)))

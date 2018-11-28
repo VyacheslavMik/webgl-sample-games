@@ -14,8 +14,7 @@
 (def wall-tile-start 4)
 (def wall-tile-end 7)
 
-(defn tile-rect [x y]
-  {:x x :y y :w tile-width :h tile-height})
+(defn tile-rect [x y] {:x x :y y :w tile-width :h tile-height})
 
 (def tiles [(tile-rect 0 0)
             (tile-rect 32 0)
@@ -50,8 +49,8 @@
 (defn init []
   (swap! s/context assoc :map-squares (generate-random-map)))
 
-(defn get-square-by-pixel-x [pixel-x] (/ pixel-x tile-width))
-(defn get-square-by-pixel-y [pixel-y] (/ pixel-y tile-height))
+(defn get-square-by-pixel-x [pixel-x] (Math/floor (/ pixel-x tile-width)))
+(defn get-square-by-pixel-y [pixel-y] (Math/floor (/ pixel-y tile-height)))
 
 (defn get-square-at-pixel [pixel-location]
   {:x (get-square-by-pixel-x (:x pixel-location))
@@ -108,6 +107,7 @@
   ([tile-x tile-y]
    (let [tile-index (get-tile-at-square tile-x tile-y)]
      (if (= tile-index -1)
+       false
        (>= tile-index wall-tile-start)))))
 
 (defn wall-tile-by-pixel? [pixel-location]
@@ -123,11 +123,11 @@
 
         start-y (get-square-by-pixel-y y)
         end-y (get-square-by-pixel-y (+ y (camera/view-port-height)))]
+    #_(println start-x end-x start-y end-y)
     (doseq [x (range start-x (inc end-x))]
       (doseq [y (range start-y (inc end-y))]
         (when (and (>= x 0) (< x map-width)
                    (>= y 0) (< y map-height))
-          #_(println (get tiles (get-tile-at-square x y)))
           (engine/draw-rectangle
            {:texture texture
             :position (square-screen-rectangle x y)
