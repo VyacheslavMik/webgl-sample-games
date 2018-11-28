@@ -4,6 +4,7 @@
             [games.robot-rampage.utils :as u]
             [games.robot-rampage.camera :as camera]
             [games.robot-rampage.tile-map :as tile-map]
+            [games.robot-rampage.weapon-manager :as weapon-manager]
             [games.robot-rampage.sprite :as sprite]))
 
 (def frame-side 32)
@@ -152,6 +153,9 @@
                      (u/vector-mul (:speed player)))
         fire-angle (-> (handle-mouse-shots player)
                        (u/vector-normalize))]
+    (when (and (not (u/vector-zero fire-angle)) (weapon-manager/can-fire-weapon))
+      (weapon-manager/fire-weapon (-> player :turret-sprite :world-location)
+                                  (u/vector-mul fire-angle weapon-manager/weapon-speed)))
     (-> player
         (update :base-sprite update-angle move-angle)
         (update :turret-sprite update-angle fire-angle)

@@ -95,6 +95,9 @@
            :time-for-current-frame 0)
     sprite))
 
+(defn set-frame [sprite frame]
+  (assoc sprite :current-frame (u/clamp frame 0 (-> sprite :frames count dec))))
+
 (defn update* [sprite elapsed]
   (if-not (:expired? sprite)
     (-> sprite

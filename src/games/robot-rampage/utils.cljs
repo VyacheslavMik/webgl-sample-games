@@ -51,3 +51,12 @@
 
 (defn rectangle-bottom [rectangle]
   (+ (:y rectangle) (:height rectangle)))
+
+(defn color-lerp [a b t]
+  (let [ar (.-r a) ag (.-g a) ab (.-b a) aa (.-a a)
+        br (.-r b) bg (.-g b) bb (.-b b) ba (.-a b)
+        t (max 0 (min t 1))]
+    #js {:r (+ ar (* (- br ar) t))
+         :g (+ ag (* (- bg ag) t))
+         :b (+ ab (* (- bb ab) t))
+         :a (+ aa (* (- ba aa) t))}))
