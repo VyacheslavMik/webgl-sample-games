@@ -291,19 +291,7 @@
         (.activeTexture gl (.-TEXTURE0 gl))
         (.bindTexture gl (.-TEXTURE_2D gl) (.-texture item))
         (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
-        (.drawArrays gl (.-TRIANGLES gl) 0 (/ (count (.-data item)) 8)))
-
-      #_(loop [res (prepare-data ctx (persistent! (:rectangles @context)))]
-          (when (> (count (:data res)) 0)
-            (prepare-buffer ctx (:data res))
-
-            (.activeTexture gl (.-TEXTURE0 gl))
-            (.bindTexture gl (.-TEXTURE_2D gl) (:texture res))
-            (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
-            (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> res :data count) 8))
-            (when-let [rectangles (:rectangles res)]
-              (when (> (count rectangles) 0)
-                (recur (prepare-data ctx rectangles)))))))))
+        (.drawArrays gl (.-TRIANGLES gl) 0 (/ (count (.-data item)) 8))))))
 
 (defn handle-key-down [ev]
   (swap! context update :pressed-keys conj (keyword (.-code ev))))
@@ -322,6 +310,12 @@
 
 (defn handle-mouse-up [ev]
   (swap! context assoc :mouse-state nil))
+
+(defn handle-mouse-move [ev]
+  (when-let [button ({1 :left 2 :right 3 :left} (.-buttons ev))]
+    (swap! context assoc :mouse-state {:button button
+                                       :x (.-offsetX ev)
+                                       :y (.-offsetY ev)})))
 
 (defn handle-touch-start [ev]
   (let [rect (.getBoundingClientRect (:text-canvas @context))
@@ -346,14 +340,16 @@
   (.removeEventListener text-canvas "keyup"       handle-key-up)
   (.removeEventListener text-canvas "mousedown"   handle-mouse-down)
   (.removeEventListener text-canvas "mouseup"     handle-mouse-up)
-  (.addEventListener    text-canvas "touchstart"  handle-touch-start)
-  (.addEventListener    text-canvas "touchend"    handle-touch-end)
+  (.removeEventListener text-canvas "mousemove"   handle-mouse-move)
+  (.removeEventListener text-canvas "touchstart"  handle-touch-start)
+  (.removeEventListener text-canvas "touchend"    handle-touch-end)
 
   (.addEventListener    text-canvas "contextmenu" handle-context-menu)
   (.addEventListener    text-canvas "keydown"     handle-key-down)
   (.addEventListener    text-canvas "keyup"       handle-key-up)
   (.addEventListener    text-canvas "mousedown"   handle-mouse-down)
   (.addEventListener    text-canvas "mouseup"     handle-mouse-up)
+  (.addEventListener    text-canvas "mousemove"   handle-mouse-move)
   (.addEventListener    text-canvas "touchstart"  handle-touch-start)
   (.addEventListener    text-canvas "touchend"    handle-touch-end))
 

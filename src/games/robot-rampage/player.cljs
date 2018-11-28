@@ -14,7 +14,7 @@
 (def turret-initial-frame {:x 0 :y 96 :w frame-side :h frame-side})
 (def turret-frame-count 1)
 
-(def world-location {:x 600 :y 32})
+(def world-location {:x 32 :y 32})
 
 (def scroll-area {:x 150 :y 100 :width 500 :height 400})
 
@@ -57,8 +57,12 @@
     (engine/key-pressed? :KeyS) (update :y inc)
     (engine/key-pressed? :KeyD) (update :x inc)))
 
-(defn handle-mouse-shots []
-  )
+(defn handle-mouse-shots [player]
+  (if-let [mouse-state (engine/get-mouse-state)]
+    (let [screen-location (sprite/screen-location (:turret-sprite player))
+          mouse-loc {:x (:x mouse-state) :y (:y mouse-state)}]
+      (u/vector-sub mouse-loc screen-location))
+    {:x 0 :y 0}))
 
 (defn check-tile-obstacles [move-angle player elapsed]
   (let [new-horizontal-location (-> player
@@ -134,16 +138,23 @@
 
     move-angle))
 
+(defn update-angle [sprite angle]
+  (if (u/vector-zero angle)
+    sprite
+    (sprite/rotate-to sprite angle)))
+
 (defn handle-input [player elapsed]
   (let [move-angle (-> (handle-keyboard-movement)
                        (u/vector-normalize))
         velocity (-> move-angle
                      (check-tile-obstacles player elapsed)
                      (reposition-camera player elapsed)
-                     (u/vector-mul (:speed player)))]
+                     (u/vector-mul (:speed player)))
+        fire-angle (-> (handle-mouse-shots player)
+                       (u/vector-normalize))]
     (-> player
-        (update :base-sprite sprite/rotate-to move-angle)
-        ;;(update :turret-sprite (sprite/rotate-to turret-angle))
+        (update :base-sprite update-angle move-angle)
+        (update :turret-sprite update-angle fire-angle)
         (assoc-in [:base-sprite :velocity] velocity))))
 
 (defn clamp-to-world [player]
