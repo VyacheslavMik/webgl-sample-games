@@ -3,9 +3,10 @@
 (defonce context         (atom nil))
 (def     then            (atom 0))
 
-(def color-white [1.0 1.0 1.0 1.0])
-(defn color [v] v)
-(defn rgb-color [[r g b a]] [(/ r 255) (/ g 255) (/ b 255) (/ a 255)])
+(def color-white #js {:r 1.0 :g 1.0 :b 1.0 :a 1.0})
+(defn color [[r g b a]] #js {:r r :g g :b b :a a})
+(defn rgb-color [[r g b a]]
+  #js {:r (/ r 255) :g (/ g 255) :b (/ b 255) :a (/ a 255)})
 
 (defn play-sound [url]
   (.play (js/Audio. url)))
@@ -104,10 +105,10 @@
         nil))))
 
 (defn rgba-color [color]
-  (str "rgba(" (Math/floor (* 255 (get color 0)))
-       ","     (Math/floor (* 255 (get color 1)))
-       ","     (Math/floor (* 255 (get color 2)))
-       ","     (get color 3)
+  (str "rgba(" (Math/floor (* 255 (.-r color)))
+       ","     (Math/floor (* 255 (.-g color)))
+       ","     (Math/floor (* 255 (.-b color)))
+       ","     (.-a color)
        ")"))
 
 (defn draw-text [{:keys [text color scale font position align]}]
@@ -122,11 +123,6 @@
     (set! (.-textBaseline ctx) "middle")
     (.fillText ctx text x y)))
 
-(def draw-rectangle-invoke (atom 0))
-(defn draw-rectangle [rectangle]
-  (swap! draw-rectangle-invoke inc)
-  (swap! context update :rectangles conj! rectangle))
-
 (defn rotate-point [arr x y cos-angle sin-angle dx dy]
   (let [x' (- (* x cos-angle) (* y sin-angle))
         y' (+ (* x sin-angle) (* y cos-angle))]
@@ -137,95 +133,120 @@
     (rotate-point arr x y cos sin dx dy)
     (.push arr (+ x dx) (+ y dy))))
 
-(defn prepare-data [{:keys [textures]} rectangles]
-  (loop [[{:keys [color effect origin position size texture tex-coords]} & rest :as rectangles] rectangles
-         data     (array)
-         prev-tex texture]
-    (if (and (= prev-tex texture) rectangles)
-      (let [tex-size (get textures texture)
-            size (or size
-                     (and tex-coords {:width (:w tex-coords)
-                                      :height (:h tex-coords)})
-                     tex-size)
-            half-height (/ (:height size) 2)
-            half-width  (/ (:width size) 2)
+(defn prepare-rectangle [item rectangle]
+  (let [data (.-data item)
+        {:keys [color effect origin position size texture tex-coords]} rectangle
+        tex-size (.-texsize item)
+        size (or size
+                 (and tex-coords {:width (:w tex-coords)
+                                  :height (:h tex-coords)})
+                 tex-size)
+        half-height (/ (:height size) 2)
+        half-width  (/ (:width size) 2)
 
-            vx1 (- half-width)  vx2 half-width
-            vy1 (- half-height) vy2 half-height
+        vx1 (- half-width)  vx2 half-width
+        vy1 (- half-height) vy2 half-height
 
-            rotate? (= (:type effect) :rotate)
-            angle   (:angle effect)
-            radians (:radians effect)
+        rotate? (= (:type effect) :rotate)
+        angle   (:angle effect)
+        radians (:radians effect)
 
-            angle-rad (when rotate? (if angle (* angle (/ Math/PI 180)) radians))
-            cos (when rotate? (Math/cos angle-rad))
-            sin (when rotate? (Math/sin angle-rad))
+        angle-rad (when rotate? (if angle (* angle (/ Math/PI 180)) radians))
+        cos (when rotate? (Math/cos angle-rad))
+        sin (when rotate? (Math/sin angle-rad))
 
-            [x y] (cond
-                    origin   [(:x origin) (:y origin)]
-                    position [(+ (:x position) half-width) (+ (:y position) half-height)]
-                    :else     [half-width half-height])
-            
-            [r g b a] (or color color-white)
+        x (cond
+            origin   (:x origin)
+            position (+ (:x position) half-width)
+            :else    half-width)
 
-            [tx1 tx2 ty1 ty2] (if (and tex-coords tex-size)
-                                (let [{:keys [x y w h]} tex-coords
-                                      {:keys [width height]} tex-size
-                                      x2 (/ (+ x w) width)
-                                      y2 (/ (+ y h) height)
-                                      x1 (/ x width)
-                                      y1 (/ y height)]
-                                  [x1 x2 y1 y2])
-                                [0 1 0 1])
+        y (cond
+            origin   (:y origin)
+            position (+ (:y position) half-height)
+            :else    half-height)
 
-            flip? (= (:type effect) :flip)]
-        ;; v1
-        (add-vertex data rotate? vx2 vy2 cos sin x y)
-        (.push data r g b a)
-        (if flip?
-          (.push data tx1 ty2)
-          (.push data tx2 ty2))
+        color (or color color-white)
 
-        ;; v2
-        (add-vertex data rotate? vx1 vy2 cos sin x y)
-        (.push data r g b a)
-        (if flip?
-          (.push data tx2 ty2)
-          (.push data tx1 ty2))
+        r (.-r color)
+        g (.-g color)
+        b (.-b color)
+        a (.-a color)
 
-        ;; v3
-        (add-vertex data rotate? vx2 vy1 cos sin x y)
-        (.push data r g b a)
-        (if flip?
-          (.push data tx1 ty1)
-          (.push data tx2 ty1))
+        tex-coords (if (and tex-coords tex-size)
+                     (let [{:keys [x y w h]} tex-coords
+                           {:keys [width height]} tex-size
+                           x2 (/ (+ x w) width)
+                           y2 (/ (+ y h) height)
+                           x1 (/ x width)
+                           y1 (/ y height)]
+                       #js {:tx1 x1 :tx2 x2 :ty1 y1 :ty2 y2})
+                     #js {:tx1 0 :tx2 1 :ty1 0 :ty2 1})
+        tx1 (.-tx1 tex-coords)
+        tx2 (.-tx2 tex-coords)
+        ty1 (.-ty1 tex-coords)
+        ty2 (.-ty2 tex-coords)
 
-        ;; v4
-        (add-vertex data rotate? vx1 vy2 cos sin x y)
-        (.push data r g b a)
-        (if flip?
-          (.push data tx2 ty2)
-          (.push data tx1 ty2))
-        
-        ;; v5
-        (add-vertex data rotate? vx2 vy1 cos sin x y)
-        (.push data r g b a)
-        (if flip?
-          (.push data tx1 ty1)
-          (.push data tx2 ty1))
+        flip? (= (:type effect) :flip)]
+    ;; v1
+    (add-vertex data rotate? vx2 vy2 cos sin x y)
+    (.push data r g b a)
+    (if flip?
+      (.push data tx1 ty2)
+      (.push data tx2 ty2))
 
-        ;; v6
-        (add-vertex data rotate? vx1 vy1 cos sin x y)
-        (.push data r g b a)
-        (if flip?
-          (.push data tx2 ty1)
-          (.push data tx1 ty1))
+    ;; v2
+    (add-vertex data rotate? vx1 vy2 cos sin x y)
+    (.push data r g b a)
+    (if flip?
+      (.push data tx2 ty2)
+      (.push data tx1 ty2))
 
-        (recur rest data texture))
-      (when (and (> (count data) 0) prev-tex)
-        {:data       data
-         :texture    prev-tex
-         :rectangles rectangles}))))
+    ;; v3
+    (add-vertex data rotate? vx2 vy1 cos sin x y)
+    (.push data r g b a)
+    (if flip?
+      (.push data tx1 ty1)
+      (.push data tx2 ty1))
+
+    ;; v4
+    (add-vertex data rotate? vx1 vy2 cos sin x y)
+    (.push data r g b a)
+    (if flip?
+      (.push data tx2 ty2)
+      (.push data tx1 ty2))
+
+    ;; v5
+    (add-vertex data rotate? vx2 vy1 cos sin x y)
+    (.push data r g b a)
+    (if flip?
+      (.push data tx1 ty1)
+      (.push data tx2 ty1))
+
+    ;; v6
+    (add-vertex data rotate? vx1 vy1 cos sin x y)
+    (.push data r g b a)
+    (if flip?
+      (.push data tx2 ty1)
+      (.push data tx1 ty1))))
+
+(def rectangles #js {:current  nil
+                     :all      nil})
+
+(defn new-rectangles []
+  (set! (.-current rectangles) nil)
+  (set! (.-all rectangles) (array)))
+
+(defn get-rectangle [texture]
+  (when (or (not (.-current rectangles))
+            (not= texture (.. rectangles -current -texture)))
+    (set! (.-current rectangles) #js {:texture texture
+                                      :texsize (get-in @context [:textures texture])
+                                      :data (array)})
+    (.push (.-all rectangles) (.-current rectangles)))
+  (.. rectangles -current))
+
+(defn draw-rectangle [rectangle]
+  (prepare-rectangle (get-rectangle (:texture rectangle)) rectangle))
 
 (defn prepare-vertex-attrib [{:keys [gl program-info]} k num-components stride offset]
   (let [type (.-FLOAT gl)
@@ -264,20 +285,25 @@
                        false
                        projection-matrix)
     (when draw-fn
-      (reset! draw-rectangle-invoke 0)
       (draw-fn)
-      (loop [res (prepare-data ctx (persistent! (:rectangles @context)))]
-        (when (> (count (:data res)) 0)
-          #_(println @draw-rectangle-invoke (count (:data res)))
-          (prepare-buffer ctx (:data res))
+      (doseq [item (.-all rectangles)]
+        (prepare-buffer ctx (.-data item))
+        (.activeTexture gl (.-TEXTURE0 gl))
+        (.bindTexture gl (.-TEXTURE_2D gl) (.-texture item))
+        (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
+        (.drawArrays gl (.-TRIANGLES gl) 0 (/ (count (.-data item)) 8)))
 
-          (.activeTexture gl (.-TEXTURE0 gl))
-          (.bindTexture gl (.-TEXTURE_2D gl) (:texture res))
-          (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
-          (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> res :data count) 8))
-          (when-let [rectangles (:rectangles res)]
-            (when (> (count rectangles) 0)
-              (recur (prepare-data ctx rectangles)))))))))
+      #_(loop [res (prepare-data ctx (persistent! (:rectangles @context)))]
+          (when (> (count (:data res)) 0)
+            (prepare-buffer ctx (:data res))
+
+            (.activeTexture gl (.-TEXTURE0 gl))
+            (.bindTexture gl (.-TEXTURE_2D gl) (:texture res))
+            (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
+            (.drawArrays gl (.-TRIANGLES gl) 0 (/ (-> res :data count) 8))
+            (when-let [rectangles (:rectangles res)]
+              (when (> (count rectangles) 0)
+                (recur (prepare-data ctx rectangles)))))))))
 
 (defn handle-key-down [ev]
   (swap! context update :pressed-keys conj (keyword (.-code ev))))
@@ -388,7 +414,7 @@
           (time
            (when update-fn (update-fn delta))))
         (when update-fn (update-fn delta)))
-      (swap! context assoc :rectangles (transient []))
+      (new-rectangles)
       (if measure-time
         (do
           (print "Draw ")
