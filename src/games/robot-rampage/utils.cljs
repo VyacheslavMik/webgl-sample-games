@@ -24,6 +24,11 @@
       (update :x * f)
       (update :y * f)))
 
+(defn vector-div [v f]
+  (-> v
+      (update :x / f)
+      (update :y / f)))
+
 (defn vector-distance [{x1 :x y1 :y} {x2 :x y2 :y}]
   (Math/sqrt (+ (* (- x2 x1) (- x2 x1))
                 (* (- y2 y1) (- y2 y1)))))
@@ -51,6 +56,9 @@
 
 (defn rectangle-bottom [rectangle]
   (+ (:y rectangle) (:height rectangle)))
+
+(defn rectangle-offset [rectangle point]
+  (vector-add rectangle point))
 
 (defn color-lerp [a b t]
   (let [ar (.-r a) ag (.-g a) ab (.-b a) aa (.-a a)

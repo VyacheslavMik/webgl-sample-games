@@ -2,6 +2,8 @@
   (:require [games.engine :as engine]
             [games.robot-rampage.storage :as s]
             [games.robot-rampage.sprite :as sprite]
+            [games.robot-rampage.tile-map :as tile-map]
+            [games.robot-rampage.effects-manager :as effects-manager]
             [games.robot-rampage.particle :as particle]))
 
 (def weapon-speed 600)
@@ -52,13 +54,28 @@
 
     )
   (swap! s/context assoc-in [:weapon-manager :shot-timer] 0)
-)
+  )
+
+(defn check-shot-wall-impacts [shot]
+  (if (:expired? shot)
+    shot
+    (if (tile-map/wall-tile? (tile-map/get-square-at-pixel (sprite/world-center shot)))
+      (do
+        (if (= (:current-frame shot) 0)
+          (effects-manager/add-sparks-effect (sprite/world-center shot) (:velocity shot))
+          ;; effect explosion
+          )
+        (assoc shot :expired? true))
+      shot)))
 
 (defn update* [elapsed]
   (swap! s/context update-in [:weapon-manager :shot-timer] + elapsed)
   (let [shots (->> @s/context
                    :weapon-manager :shots
-                   (mapv (fn [shot] (particle/update* shot elapsed)))
+                   (mapv (fn [shot]
+                           (-> shot
+                               (particle/update* elapsed)
+                               (check-shot-wall-impacts))))
                    (remove :expired?)
                    (vec))]
     (swap! s/context assoc-in [:weapon-manager :shots] shots)

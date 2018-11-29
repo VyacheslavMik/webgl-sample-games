@@ -4,6 +4,7 @@
             [games.robot-rampage.game-manager :as game-manager]
             [games.robot-rampage.camera :as camera]
             [games.robot-rampage.player :as player]
+            [games.robot-rampage.effects-manager :as effects-manager]
             [games.robot-rampage.weapon-manager :as weapon-manager]
             [games.robot-rampage.tile-map :as tile-map]))
 
@@ -17,7 +18,8 @@
     (when (#{:playing :wave-complete :game-over} state)
       (tile-map/draw*)
       (weapon-manager/draw*)
-      (player/draw*))
+      (player/draw*)
+      (effects-manager/draw*))
 
     (when (= state :game-over))))
 
@@ -33,8 +35,9 @@
 
       :playing
       (do
-        (player/update* elapsed)
-        (weapon-manager/update* elapsed))
+        (player/update*          elapsed)
+        (weapon-manager/update*  elapsed)
+        (effects-manager/update* elapsed))
 
       :player-dead
       (do)
@@ -67,6 +70,7 @@
                                                       (range 1 5)))
 
   (player/init)
+  (effects-manager/init)
   (weapon-manager/init)
   (camera/init)
   (tile-map/init))
