@@ -4,6 +4,7 @@
             [games.robot-rampage.sprite :as sprite]
             [games.robot-rampage.tile-map :as tile-map]
             [games.robot-rampage.effects-manager :as effects-manager]
+            [games.robot-rampage.path-finder :as path-finder]
             [games.robot-rampage.particle :as particle]))
 
 (def weapon-speed 600)
@@ -13,10 +14,16 @@
 
 (def shot-rectangle {:x 0 :y 128 :w 32 :h 32})
 
+(def time-between-powerups 2)
+
+(def max-active-powerups 0)
+
 (defn init []
   (swap! s/context assoc :weapon-manager
          {:shot-timer 0
           :shots []
+          :powerups []
+          :time-since-last-powerup 0
           :current-weapon-type :normal}))
 
 (defn weapon-fire-delay []
@@ -68,7 +75,59 @@
         (assoc shot :expired? true))
       shot)))
 
-(defn update* [elapsed]
+(defn pathing-node-position []
+  (let [base-sprite (get-in @s/context [:player :base-sprite])]
+    (tile-map/get-square-at-pixel (sprite/world-center base-sprite))))
+
+(defn try-to-spawn-powerup [x y type]
+  (let [powerups (get-in @s/context [:weapon-manager :powerups])]
+    (when (< (count powerups) max-active-powerups)
+      (let [this-destination (tile-map/square-world-rectangle x y)
+            blocked? (some (fn [p] (= (sprite/world-rectangle p) this-destination)) powerups)
+            path-found? (path-finder/find-path {:x x :y y} (pathing-node-position))]
+        (when (and (not blocked?) path-found?)
+          (let [frame (if (= type :rocket) 1 0)
+                new-powerup (-> (sprite/new-sprite {:x (:x this-destination)
+                                                    :y (:y this-destination)}
+                                                   {:x 64 :y 128 :w 32 :h 32}
+                                                   {:x 0 :y 0})
+                                (assoc :animate? false
+                                       :current-frame frame
+                                       :collision-radius 14)
+                                (sprite/add-frame {:x 96 :y 128 :w 32 :h 32}))
+                powerups (conj powerups new-powerup)]
+            (swap! s/context assoc-in [:weapon-manager :powerups] powerups)
+            (swap! s/context assoc-in [:weapon-manager :time-since-last-powerup] 0)))))))
+
+(defn check-powerup-spawns [elapsed]
+  (swap! s/context update-in [:weapon-manager :time-since-last-powerup] + elapsed)
+  (when (>= (get-in @s/context [:weapon-manager :time-since-last-powerup]) time-between-powerups)
+    (let [type (if (= (rand-int 2) 1)
+                 :rocket
+                 :triple)]
+      (try-to-spawn-powerup (rand-int tile-map/map-width)
+                            (rand-int tile-map/map-height)
+                            type))))
+
+(def tmp (atom 0))
+
+(defn update* [elapsed] 
+  #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+  (when #_(= @tmp 0) true #_(> @tmp 1)
+
+        #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+    #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+    #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+    (time
+       (println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+       )
+    #_(let [end-tile (pathing-node-position)
+          start-tile {:x 48 :y 48}]
+      (doseq [_ (range 30)]
+        (path-finder/find-path start-tile end-tile)))
+    #_(reset! tmp 0)) 
+  (swap! tmp + elapsed)
+
   (swap! s/context update-in [:weapon-manager :shot-timer] + elapsed)
   (let [shots (->> @s/context
                    :weapon-manager :shots
@@ -78,10 +137,13 @@
                                (check-shot-wall-impacts))))
                    (remove :expired?)
                    (vec))]
-    (swap! s/context assoc-in [:weapon-manager :shots] shots)
-    ))
+    (swap! s/context assoc-in [:weapon-manager :shots] shots))
+  (check-powerup-spawns elapsed))
 
 (defn draw* []
-  #_(println (get-in @s/context [:weapon-manager :shots]))
-  (doseq [shot (get-in @s/context [:weapon-manager :shots])]
-    (particle/draw* shot)))
+  (let [{:keys [powerups shots]} (:weapon-manager @s/context)]
+    ;;(println powerups)
+    (doseq [shot shots]
+      (particle/draw* shot))
+    (doseq [powerup powerups]
+      (sprite/draw* powerup))))

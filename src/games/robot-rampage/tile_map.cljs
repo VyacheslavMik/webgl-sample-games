@@ -29,22 +29,23 @@
   (let [wall-change-per-square 10
         floor-tile (u/random-int floor-tile-start (inc floor-tile-end))
         wall-tile (u/random-int wall-tile-start (inc wall-tile-end))]
-    (mapv (fn [x]
-            (mapv (fn [y]
-                    (cond
-                      (or (= x 0) (= y 0) (= x (dec map-width)) (= y (dec map-height)))
-                      wall-tile
+    (clj->js
+     (mapv (fn [x]
+             (mapv (fn [y]
+                     (cond
+                       (or (= x 0) (= y 0) (= x (dec map-width)) (= y (dec map-height)))
+                       wall-tile
 
-                      (or (= x 1) (= y 1) (= x (- map-width 2)) (= y (- map-height 2)))
-                      floor-tile
+                       (or (= x 1) (= y 1) (= x (- map-width 2)) (= y (- map-height 2)))
+                       floor-tile
 
-                      (<= (rand-int 100) wall-change-per-square)
-                      wall-tile
+                       (<= (rand-int 100) wall-change-per-square)
+                       wall-tile
 
-                      :else
-                      floor-tile))
-                  (range map-height)))
-          (range map-width))))
+                       :else
+                       floor-tile))
+                   (range map-height)))
+           (range map-width)))))
 
 (defn init []
   (swap! s/context assoc :map-squares (generate-random-map)))
@@ -84,13 +85,13 @@
 (defn get-tile-at-square [tile-x tile-y]
   (if (and (>= tile-x 0) (< tile-x map-width)
            (>= tile-y 0) (< tile-y map-height))
-    (get-in @s/context [:map-squares tile-x tile-y])
+    (aget (:map-squares @s/context) tile-x tile-y)
     -1))
 
 (defn set-tile-at-square [tile-x tile-y tile]
   (when (and (>= tile-x 0) (< tile-x map-width)
              (>= tile-y 0) (< tile-y map-height))
-    (swap! s/context assoc-in [:map-squares tile-x tile-y] tile)))
+    (swap! s/context update :map-squares aset tile-x tile-y tile)))
 
 (defn get-tile-at-pixel
   ([pixel-location]
@@ -123,7 +124,6 @@
 
         start-y (get-square-by-pixel-y y)
         end-y (get-square-by-pixel-y (+ y (camera/view-port-height)))]
-    #_(println start-x end-x start-y end-y)
     (doseq [x (range start-x (inc end-x))]
       (doseq [y (range start-y (inc end-y))]
         (when (and (>= x 0) (< x map-width)

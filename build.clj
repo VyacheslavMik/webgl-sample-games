@@ -19,7 +19,7 @@
   (merge compiler-config
          {:optimizations :none
           :optimize-constants true
-          :source-map    false}))
+          :source-map    true}))
 
 (def nrepl-options
   {:nrepl-port       7890
