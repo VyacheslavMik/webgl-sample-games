@@ -16,7 +16,7 @@
 
 (def time-between-powerups 2)
 
-(def max-active-powerups 0)
+(def max-active-powerups 5)
 
 (defn init []
   (swap! s/context assoc :weapon-manager
@@ -109,24 +109,7 @@
                             (rand-int tile-map/map-height)
                             type))))
 
-(def tmp (atom 0))
-
-(defn update* [elapsed] 
-  #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-  (when #_(= @tmp 0) true #_(> @tmp 1)
-
-        #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-    #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-    #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-    (time
-       (println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-       )
-    #_(let [end-tile (pathing-node-position)
-          start-tile {:x 48 :y 48}]
-      (doseq [_ (range 30)]
-        (path-finder/find-path start-tile end-tile)))
-    #_(reset! tmp 0)) 
-  (swap! tmp + elapsed)
+(defn update* [elapsed]
 
   (swap! s/context update-in [:weapon-manager :shot-timer] + elapsed)
   (let [shots (->> @s/context
@@ -142,7 +125,6 @@
 
 (defn draw* []
   (let [{:keys [powerups shots]} (:weapon-manager @s/context)]
-    ;;(println powerups)
     (doseq [shot shots]
       (particle/draw* shot))
     (doseq [powerup powerups]
