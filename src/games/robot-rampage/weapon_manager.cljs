@@ -16,7 +16,7 @@
 
 (def time-between-powerups 2)
 
-(def max-active-powerups 5)
+(def max-active-powerups 0)
 
 (defn init []
   (swap! s/context assoc :weapon-manager
@@ -109,7 +109,65 @@
                             (rand-int tile-map/map-height)
                             type))))
 
-(defn update* [elapsed]
+(def tmp (atom 0))
+(def tmp2 (atom []))
+
+(defn update* [elapsed] 
+  #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+  (when #_(= @tmp 0) true #_(> @tmp 10)
+
+        #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+    #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+    #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+    #_(let [start# (system-time)
+          ret# (path-finder/find-path {:x 48 :y 48} (pathing-node-position))]
+      (swap! tmp2 conj (js/parseFloat (.toFixed (- (system-time) start#) 6)))
+      ret#)
+    #_(when (> @tmp 10)
+      (let [v @tmp2]
+        (println (/ (reduce + v) (count v)) (reduce min v) (reduce max v))
+        (reset! tmp 0)))
+    #_(time
+       (println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
+       )
+
+    (println "-----") 
+    (time
+     (let [end-tile (pathing-node-position)
+           start-tile {:x 48 :y 48}]
+       (println (path-finder/find-path start-tile end-tile))))
+    (time
+     (let [end-tile (clj->js (pathing-node-position))
+           start-tile #js {:x 48 :y 48}
+           tiles (:map-squares @s/context)]
+       (println (js->clj (js/findPath start-tile end-tile tiles)))))
+    (println "-----") 
+
+    (when (= @tmp 0)
+      #_(time
+       (let [end-tile (pathing-node-position)
+             start-tile {:x 48 :y 48}]
+         (doseq [_ (range 30)]
+           (path-finder/find-path start-tile end-tile))))
+      #_(time
+       (let [end-tile (pathing-node-position)
+             start-tile {:x 48 :y 48}]
+         (println (path-finder/find-path start-tile end-tile))))
+      #_(let [end-tile (clj->js (pathing-node-position))
+            start-tile #js {:x 48 :y 48}
+            tiles (:map-squares @s/context)]
+        (time
+         (println (js/findPath start-tile end-tile tiles))))
+      #_(time
+       (let [end-tile (clj->js (pathing-node-position))
+             start-tile #js {:x 48 :y 48}
+             tiles (:map-squares @s/context)]
+         (doseq [_ (range 30)]
+           (js/find_path start-tile end-tile tiles))))
+
+      #_(reset! tmp 0))
+    #_(reset! tmp 0))
+  (swap! tmp + elapsed)
 
   (swap! s/context update-in [:weapon-manager :shot-timer] + elapsed)
   (let [shots (->> @s/context
@@ -125,6 +183,7 @@
 
 (defn draw* []
   (let [{:keys [powerups shots]} (:weapon-manager @s/context)]
+    ;;(println powerups)
     (doseq [shot shots]
       (particle/draw* shot))
     (doseq [powerup powerups]

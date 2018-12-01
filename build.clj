@@ -30,7 +30,8 @@
 
 (def figwheel-options
   {:figwheel-options (merge nrepl-options
-                            {:css-dirs ["resources/public/css"]})
+                            {:css-dirs ["resources/public/css"]
+                             :server-port 3450})
    :all-builds       [{:id           "dev"
                        :figwheel     {:on-jsload "games.core/on-js-reload"}
                        :source-paths [source-dir "dev"]
