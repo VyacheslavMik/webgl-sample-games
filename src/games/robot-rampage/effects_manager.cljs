@@ -100,9 +100,9 @@
                   20
                   2
                   4
-                  6.0
+                  6
                   90
-                  (engine/color [1.0 0.3 0 1])
+                  (engine/color [1.0 0.3 0 0.5])
                   (engine/color [1.0 0.3 0 0]))))
 
 (defn add-larget-explosion [location]
@@ -113,8 +113,8 @@
                  4
                  6
                  30
-                 45
-                 (engine/color [1.0 0.3 0 1])
+                 90
+                 (engine/color [1.0 0.3 0 0.5])
                  (engine/color [1.0 0.3 0 0])))
 
 (defn update* [elapsed]

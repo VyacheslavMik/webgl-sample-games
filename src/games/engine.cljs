@@ -37,7 +37,6 @@
 
     void main() {
       gl_FragColor = texture2D(uSampler, vTextureCoord) * vColor;
-      gl_FragColor.rgb *= gl_FragColor.a;
     }")
 
 (defn is-power-of-2 [value]

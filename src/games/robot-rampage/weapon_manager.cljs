@@ -28,7 +28,7 @@
           :powerups []
           :time-since-last-powerup 0
           :weapon-time-remaining 0 
-          :current-weapon-type :rocket #_:normal}))
+          :current-weapon-type :normal}))
 
 (defn weapon-fire-delay []
   (if (= (get-in @s/context [:weapon-manager :current-weapon-type]) :rocket)
@@ -90,7 +90,18 @@
   (effects-manager/add-larget-explosion location))
 
 (defn check-rocket-splash-damage [location]
-  )
+  (let [rocket-splash-raidus 40]
+    (doall
+     (map-indexed (fn [i enemy]
+                    (when-not (:destroyed? enemy)
+                      (when (sprite/circle-colliding? (:enemy-base enemy)
+                                                      location rocket-splash-raidus)
+                        (swap! s/context assoc-in [:enemies i :destroyed?] true)
+                        ;; score
+                        ;; sound
+                        (effects-manager/add-explosion (sprite/world-center (:enemy-base enemy))
+                                                       {:x 0 :y 0}))))
+                  (:enemies @s/context)))))
 
 (defn check-shot-wall-impacts [shot]
   (if (:expired? shot)
