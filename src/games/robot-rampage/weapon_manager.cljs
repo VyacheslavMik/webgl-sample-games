@@ -1,6 +1,7 @@
 (ns games.robot-rampage.weapon-manager
   (:require [games.engine :as engine]
             [games.robot-rampage.storage :as s]
+            [games.robot-rampage.utils :as u]
             [games.robot-rampage.sprite :as sprite]
             [games.robot-rampage.tile-map :as tile-map]
             [games.robot-rampage.effects-manager :as effects-manager]
@@ -16,7 +17,9 @@
 
 (def time-between-powerups 2)
 
-(def max-active-powerups 0)
+(def max-active-powerups 5)
+(def weapon-time-default 30)
+(def triple-weapon-split-angle (* 15 (/ Math/PI 180)))
 
 (defn init []
   (swap! s/context assoc :weapon-manager
@@ -24,6 +27,7 @@
           :shots []
           :powerups []
           :time-since-last-powerup 0
+          :weapon-time-remaining 0 
           :current-weapon-type :normal}))
 
 (defn weapon-fire-delay []
@@ -56,11 +60,36 @@
     (case current-weapon-type
       :normal
       (add-shot location velocity 0)
-      )
-      
 
-    )
-  (swap! s/context assoc-in [:weapon-manager :shot-timer] 0)
+      :triple
+      (let [base-angle (Math/atan2 (:y velocity) (:x velocity))
+            offset triple-weapon-split-angle]
+        (add-shot location velocity 0)
+        (add-shot location
+                  (u/vector-mul
+                   {:x (Math/cos (- base-angle offset))
+                    :y (Math/sin (- base-angle offset))}
+                   (u/vector-length velocity))
+                  0)
+        (add-shot location
+                  (u/vector-mul
+                   {:x (Math/cos (+ base-angle offset))
+                    :y (Math/sin (+ base-angle offset))}
+                   (u/vector-length velocity))
+                  0))
+
+      :rocket
+      (add-shot location velocity 1)))
+  (swap! s/context assoc-in [:weapon-manager :shot-timer] 0))
+
+(defn create-large-explosion [location]
+  (effects-manager/add-larget-explosion (u/vector-add location {:x -10 :y -10}))
+  (effects-manager/add-larget-explosion (u/vector-add location {:x -10 :y 10}))
+  (effects-manager/add-larget-explosion (u/vector-add location {:x 10 :y 10}))
+  (effects-manager/add-larget-explosion (u/vector-add location {:x 10 :y -10}))
+  (effects-manager/add-larget-explosion location))
+
+(defn check-rocket-splash-damage [location]
   )
 
 (defn check-shot-wall-impacts [shot]
@@ -70,8 +99,9 @@
       (do
         (if (= (:current-frame shot) 0)
           (effects-manager/add-sparks-effect (sprite/world-center shot) (:velocity shot))
-          ;; effect explosion
-          )
+          (do
+            (create-large-explosion (sprite/world-center shot))
+            (check-rocket-splash-damage (sprite/world-center shot))))
         (assoc shot :expired? true))
       shot)))
 
@@ -105,70 +135,33 @@
     (let [type (if (= (rand-int 2) 1)
                  :rocket
                  :triple)]
-      (try-to-spawn-powerup (rand-int tile-map/map-width)
-                            (rand-int tile-map/map-height)
-                            type))))
+      (try-to-spawn-powerup (games.robot-rampage.utils/random-int 3 15) #_(rand-int tile-map/map-width)
+                            (games.robot-rampage.utils/random-int 3 15) #_(rand-int tile-map/map-height)
+                            :triple #_type))))
 
-(def tmp (atom 0))
-(def tmp2 (atom []))
+(defn check-powerup-pickups []
+  (let [base-sprite (get-in @s/context [:player :base-sprite])
+        current-weapon-type (atom nil)
+        weapon-time-remaining (atom nil)
+        powerups (->> (get-in @s/context [:weapon-manager :powerups])
+                      (filterv (fn [powerup]
+                                 (if (sprite/circle-colliding? base-sprite
+                                                               (sprite/world-center powerup)
+                                                               (:collision-radius powerup))
+                                   (do
+                                     (case (:current-frame powerup)
+                                       0 (reset! current-weapon-type :triple)
+                                       1 (reset! current-weapon-type :rocket))
+                                     (reset! weapon-time-remaining weapon-time-default)
+                                     false)
+                                   true))))]
+    (when @current-weapon-type
+      (swap! s/context assoc-in [:weapon-manager :current-weapon-type] @current-weapon-type))
+    (when @weapon-time-remaining
+      (swap! s/context assoc-in [:weapon-manager :weapon-time-remaining] @weapon-time-remaining))
+    (swap! s/context assoc-in [:weapon-manager :powerups] powerups)))
 
-(defn update* [elapsed] 
-  #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-  (when #_(= @tmp 0) true #_(> @tmp 10)
-
-        #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-    #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-    #_(println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-    #_(let [start# (system-time)
-          ret# (path-finder/find-path {:x 48 :y 48} (pathing-node-position))]
-      (swap! tmp2 conj (js/parseFloat (.toFixed (- (system-time) start#) 6)))
-      ret#)
-    #_(when (> @tmp 10)
-      (let [v @tmp2]
-        (println (/ (reduce + v) (count v)) (reduce min v) (reduce max v))
-        (reset! tmp 0)))
-    #_(time
-       (println (path-finder/find-path {:x 48 :y 48} (pathing-node-position)))
-       )
-
-    (println "-----") 
-    (time
-     (let [end-tile (pathing-node-position)
-           start-tile {:x 48 :y 48}]
-       (println (path-finder/find-path start-tile end-tile))))
-    (time
-     (let [end-tile (clj->js (pathing-node-position))
-           start-tile #js {:x 48 :y 48}
-           tiles (:map-squares @s/context)]
-       (println (js->clj (js/findPath start-tile end-tile tiles)))))
-    (println "-----") 
-
-    (when (= @tmp 0)
-      #_(time
-       (let [end-tile (pathing-node-position)
-             start-tile {:x 48 :y 48}]
-         (doseq [_ (range 30)]
-           (path-finder/find-path start-tile end-tile))))
-      #_(time
-       (let [end-tile (pathing-node-position)
-             start-tile {:x 48 :y 48}]
-         (println (path-finder/find-path start-tile end-tile))))
-      #_(let [end-tile (clj->js (pathing-node-position))
-            start-tile #js {:x 48 :y 48}
-            tiles (:map-squares @s/context)]
-        (time
-         (println (js/findPath start-tile end-tile tiles))))
-      #_(time
-       (let [end-tile (clj->js (pathing-node-position))
-             start-tile #js {:x 48 :y 48}
-             tiles (:map-squares @s/context)]
-         (doseq [_ (range 30)]
-           (js/find_path start-tile end-tile tiles))))
-
-      #_(reset! tmp 0))
-    #_(reset! tmp 0))
-  (swap! tmp + elapsed)
-
+(defn update* [elapsed]
   (swap! s/context update-in [:weapon-manager :shot-timer] + elapsed)
   (let [shots (->> @s/context
                    :weapon-manager :shots
@@ -179,11 +172,11 @@
                    (remove :expired?)
                    (vec))]
     (swap! s/context assoc-in [:weapon-manager :shots] shots))
-  (check-powerup-spawns elapsed))
+  (check-powerup-spawns elapsed)
+  (check-powerup-pickups))
 
 (defn draw* []
   (let [{:keys [powerups shots]} (:weapon-manager @s/context)]
-    ;;(println powerups)
     (doseq [shot shots]
       (particle/draw* shot))
     (doseq [powerup powerups]

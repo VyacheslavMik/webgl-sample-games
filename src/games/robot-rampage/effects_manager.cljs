@@ -43,6 +43,80 @@
                         effects (range particle-count))]
     (swap! s/context assoc-in [:effects-manager :effects] effects)))
 
+(defn add-explosion
+  ([location
+    momentum
+    min-point-count
+    max-point-count
+    min-piece-count
+    max-piece-count
+    piece-speed-scale
+    duration
+    initial-color
+    final-color]
+   (let [{:keys [explosion-frames effects particle-frame]} (:effects-manager @s/context)
+         explosion-max-speed 30
+         point-speed-min (* piece-speed-scale 2)
+         point-speed-max (* piece-speed-scale 3)
+         piece-location (u/vector-sub location {:x (/ (-> explosion-frames first :w) 2)
+                                                :y (/ (-> explosion-frames first :h) 2)})
+         pieces (u/random-int min-piece-count (inc max-piece-count))
+
+         effects (reduce (fn [acc x]
+                           (conj acc (particle/new-particle piece-location
+                                                            (get explosion-frames
+                                                                 (rand-int (count explosion-frames)))
+                                                            (u/vector-add
+                                                             (random-direction piece-speed-scale)
+                                                             momentum)
+                                                            {:x 0 :y 0}
+                                                            explosion-max-speed
+                                                            duration
+                                                            initial-color
+                                                            final-color)))
+                         effects (range pieces))
+
+         points (u/random-int min-point-count (inc max-point-count))
+
+         effects (reduce (fn [acc x]
+                           (conj acc (particle/new-particle location
+                                                            particle-frame
+                                                            (u/vector-add
+                                                             (random-direction (u/random-int point-speed-min
+                                                                                             point-speed-max))
+                                                             momentum)
+                                                            {:x 0 :y 0}
+                                                            explosion-max-speed
+                                                            duration
+                                                            initial-color
+                                                            final-color)))
+                         effects (range points))]
+     (swap! s/context assoc-in [:effects-manager :effects] effects)))
+  
+  ([location momentum]
+   (add-explosion location
+                  momentum
+                  15
+                  20
+                  2
+                  4
+                  6.0
+                  90
+                  (engine/color [1.0 0.3 0 0.5])
+                  (engine/color [1.0 0.3 0 0]))))
+
+(defn add-larget-explosion [location]
+  (add-explosion location
+                 {:x 0 :y 0}
+                 15
+                 20
+                 4
+                 6
+                 30
+                 90
+                 (engine/color [1.0 0.3 0 1])
+                 (engine/color [1.0 0.3 0 0])))
+
 (defn update* [elapsed]
   (let [effects (get-in @s/context [:effects-manager :effects])
         effects (->> effects
