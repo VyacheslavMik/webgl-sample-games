@@ -12,7 +12,7 @@
    :source-map    "resources/public/js/compiled/main.js.map"
    :output-dir    "resources/public/js/compiled/out"
    :externs ["resources/public/js/gl-matrix-min.js"
-             #_"resources/public/js/path-finder.js"]
+             "resources/public/js/path-finder.js"]
    :closure-warnings {:externs-validation :off}
    :optimizations :advanced})
 
