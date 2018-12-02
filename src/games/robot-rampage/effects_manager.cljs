@@ -102,7 +102,7 @@
                   4
                   6.0
                   90
-                  (engine/color [1.0 0.3 0 0.5])
+                  (engine/color [1.0 0.3 0 1])
                   (engine/color [1.0 0.3 0 0]))))
 
 (defn add-larget-explosion [location]
@@ -113,7 +113,7 @@
                  4
                  6
                  30
-                 90
+                 45
                  (engine/color [1.0 0.3 0 1])
                  (engine/color [1.0 0.3 0 0])))
 

@@ -28,7 +28,7 @@
           :powerups []
           :time-since-last-powerup 0
           :weapon-time-remaining 0 
-          :current-weapon-type :normal}))
+          :current-weapon-type :rocket #_:normal}))
 
 (defn weapon-fire-delay []
   (if (= (get-in @s/context [:weapon-manager :current-weapon-type]) :rocket)
@@ -105,6 +105,30 @@
         (assoc shot :expired? true))
       shot)))
 
+(defn check-shot-enemy-impacts [shot]
+  (if (:expired? shot)
+    shot
+    (let [impacts? (some (fn [[i enemy]]
+                           (when (and (not (:destroyed? enemy))
+                                      (sprite/circle-colliding? shot
+                                                                (sprite/world-center (:enemy-base enemy))
+                                                                (:collision-radius (:enemy-base enemy))))
+                             {:i i :enemy-base (:enemy-base enemy)}))
+                         (map-indexed vector (:enemies @s/context)))]
+      (if impacts?
+        (do
+          (swap! s/context assoc-in [:enemies (:i impacts?) :destroyed?] true)
+          ;; score
+          ;; play explosion
+          (if (= (:current-frame shot) 0)
+            (effects-manager/add-explosion (sprite/world-center (:enemy-base impacts?))
+                                           (u/vector-div (:velocity (:enemy-base impacts?)) 30))
+            (when (= (:current-frame shot) 1)
+              (create-large-explosion (sprite/world-center shot))
+              (check-rocket-splash-damage (sprite/world-center shot))))
+          (assoc shot :expired? true))
+        shot))))
+
 (defn pathing-node-position []
   (let [base-sprite (get-in @s/context [:player :base-sprite])]
     (tile-map/get-square-at-pixel (sprite/world-center base-sprite))))
@@ -161,21 +185,15 @@
       (swap! s/context assoc-in [:weapon-manager :weapon-time-remaining] @weapon-time-remaining))
     (swap! s/context assoc-in [:weapon-manager :powerups] powerups)))
 
-(def tmp (atom 0))
-
-(defn update* [elapsed] 
-  (when (= @tmp 0)
-    (games.robot-rampage.enemy-manager/add-enemy {:x 10 :y 10})
-    #_(reset! tmp 0))
-  (swap! tmp + elapsed)
-
+(defn update* [elapsed]
   (swap! s/context update-in [:weapon-manager :shot-timer] + elapsed)
   (let [shots (->> @s/context
                    :weapon-manager :shots
                    (mapv (fn [shot]
                            (-> shot
                                (particle/update* elapsed)
-                               (check-shot-wall-impacts))))
+                               (check-shot-wall-impacts)
+                               (check-shot-enemy-impacts))))
                    (remove :expired?)
                    (vec))]
     (swap! s/context assoc-in [:weapon-manager :shots] shots))

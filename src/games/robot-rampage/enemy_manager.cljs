@@ -18,6 +18,8 @@
     (swap! s/context update :enemies conj new-enemy)))
 
 (defn update* [elapsed]
+  (when (= (count (:enemies @s/context)) 0)
+    (add-enemy {:x 10 :y 10}))
   (let [enemies (->> (:enemies @s/context)
                      (mapv (fn [enemy]
                              (enemy/update* enemy elapsed)))
