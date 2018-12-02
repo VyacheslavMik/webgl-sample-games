@@ -63,7 +63,11 @@
     (let [screen-location (sprite/screen-location (:turret-sprite player))
           mouse-loc {:x (:x mouse-state) :y (:y mouse-state)}]
       (u/vector-sub mouse-loc screen-location))
-    {:x 0 :y 0}))
+    (if-let [touch-state (first (engine/get-touch-state))]
+      (let [screen-location (sprite/screen-location (:turret-sprite player))
+            touch-loc {:x (:x touch-state) :y (:y touch-state)}]
+        (u/vector-sub touch-loc screen-location))
+      {:x 0 :y 0})))
 
 (defn check-tile-obstacles [move-angle player elapsed]
   (let [new-horizontal-location (-> player

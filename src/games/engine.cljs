@@ -318,9 +318,13 @@
 
 (defn handle-touch-start [ev]
   (let [rect (.getBoundingClientRect (:text-canvas @context))
-        touch (.. ev -touches (item 0))]
-    (swap! context assoc :touch-state {:x (- (.-clientX touch) (.-left rect))
-                                       :y (- (.-clientY touch) (.-top rect))})))
+        touches (mapv (fn [i]
+                        (let [touch (.. ev -touches (item i))]
+                          {:x (- (.-clientX touch) (.-left rect))
+                           :y (- (.-clientY touch) (.-top rect))}))
+                      (range (.. ev -touches -length)))]
+    (swap! context assoc :touch-state touches)))
+
  (defn handle-touch-end [ev]
   (swap! context assoc :touch-state nil))
 

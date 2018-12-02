@@ -32,7 +32,7 @@
                                                                         (:collision-radius player-base-sprite))
                                  (do
                                    (swap! s/context update-in [:goal-manager :active-count] dec)
-                                   ;; score
+                                   (swap! s/context update-in [:goal-manager :score] + 150)
                                    (computer-terminal/deactivate terminal))
                                  terminal))))]
     (swap! s/context assoc-in [:goal-manager :computer-terminals] terminals)))

@@ -1,7 +1,7 @@
-const costStraight = 10;
-const costDiagonal = 15;
-const nodeStatusOpen = 1;
-const nodeStatusClosed = 0;
+costStraight = 10;
+costDiagonal = 15;
+nodeStatusOpen = 1;
+nodeStatusClosed = 0;
 
 function clamp (v, min, max) {
     if (v > max) {
@@ -21,8 +21,8 @@ function makeGridLocation (v) {
 }
 
 function distance (vector1, vector2) {
-    let v1 = vector1.x - vector2.x;
-    let v2 = vector1.y - vector2.y;
+    v1 = vector1.x - vector2.x;
+    v2 = vector1.y - vector2.y;
     return Math.sqrt(v1 * v1 + v2 * v2);
 }
 
@@ -30,10 +30,10 @@ function linearCost (node) {
     return distance(node.endNode.gridLocation, node.gridLocation);
 }
 
-let nodeStatus = [];
-let nodeCosts =  [];
-let openList =   null;
-let tiles =      null;
+nodeStatus = [];
+nodeCosts =  [];
+openList =   null;
+tiles =      null;
 
 function isWallTile (x, y) {
     if (x >= 0 && x < games.robot_rampage.tile_map.map_width &&
@@ -49,7 +49,7 @@ function isEq (node1, node2) {
 }
 
 function pathNode (parentNode, endNode, gridLocation, cost) {
-    let node = {parentNode:   parentNode,
+    node = {parentNode:   parentNode,
 		gridLocation: makeGridLocation(gridLocation),
 		endNode:      endNode,
 		directCost:   cost,
@@ -68,15 +68,15 @@ function hsSet (hs, k, v) {
 }
 
 function hsGet (hs, k) {
-    let a = hs[k.x];
+    a = hs[k.x];
     if (a) {
 	return a[k.y];
     }
 }
 
 function addNodeToOpenList (node) {
-    let index = 0;
-    let cost = node.totalCost;
+    index = 0;
+    cost = node.totalCost;
 
     while (openList.length > index && cost < openList[index].totalCost) {
 	index++;
@@ -88,15 +88,15 @@ function addNodeToOpenList (node) {
 }
 
 function findAdjacentNodes (currentNode, endNode) {
-    let adjacentNodes = [];
+    adjacentNodes = [];
 
-    let x = currentNode.gridLocation.x;
-    let y = currentNode.gridLocation.y;
+    x = currentNode.gridLocation.x;
+    y = currentNode.gridLocation.y;
 
-    let upLeft = true;
-    let upRight = true;
-    let downLeft = true;
-    let downRight = true;
+    upLeft = true;
+    upRight = true;
+    downLeft = true;
+    downRight = true;
 
     if (x > 0 && !isWallTile(x - 1, y)) {
 	adjacentNodes.push(pathNode(currentNode,
@@ -179,10 +179,8 @@ function findPath(startTile, endTile, _tiles) {
     nodeCosts = [];
     nodeStatus = [];
 
-    let i = 0;
-
-    let endNode = pathNode(null, null, endTile, 0);
-    let startNode = pathNode(null, endNode, startTile, 0);
+    endNode = pathNode(null, null, endTile, 0);
+    startNode = pathNode(null, endNode, startTile, 0);
 
     addNodeToOpenList(startNode);
 
@@ -190,7 +188,7 @@ function findPath(startTile, endTile, _tiles) {
 	currentNode = openList.pop();
 
 	if (isEq(currentNode, endNode)) {
-	    let prev = currentNode;
+	    prev = currentNode;
 	    while (currentNode.parentNode) {
 		prev = currentNode;
 		currentNode = currentNode.parentNode;
@@ -199,8 +197,9 @@ function findPath(startTile, endTile, _tiles) {
 	}
 
 	hsSet(nodeCosts, currentNode.gridLocation, null);
-
-	for (let possibleNode of findAdjacentNodes(currentNode, endNode)) {
+	adjacentNodes = findAdjacentNodes(currentNode, endNode);
+	for (i = 0; i < adjacentNodes.length; i++) {
+	    possibleNode = adjacentNodes[i];
 	    if (hsGet(nodeStatus, possibleNode.gridLocation) != undefined) {
 		if (hsGet(nodeStatus, possibleNode.gridLocation) == nodeStatusClosed) {
 		    continue;
