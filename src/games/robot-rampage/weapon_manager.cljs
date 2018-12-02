@@ -135,9 +135,9 @@
     (let [type (if (= (rand-int 2) 1)
                  :rocket
                  :triple)]
-      (try-to-spawn-powerup (games.robot-rampage.utils/random-int 3 15) #_(rand-int tile-map/map-width)
-                            (games.robot-rampage.utils/random-int 3 15) #_(rand-int tile-map/map-height)
-                            :triple #_type))))
+      (try-to-spawn-powerup (rand-int tile-map/map-width)
+                            (rand-int tile-map/map-height)
+                            type))))
 
 (defn check-powerup-pickups []
   (let [base-sprite (get-in @s/context [:player :base-sprite])
@@ -161,7 +161,14 @@
       (swap! s/context assoc-in [:weapon-manager :weapon-time-remaining] @weapon-time-remaining))
     (swap! s/context assoc-in [:weapon-manager :powerups] powerups)))
 
-(defn update* [elapsed]
+(def tmp (atom 0))
+
+(defn update* [elapsed] 
+  (when (= @tmp 0)
+    (games.robot-rampage.enemy-manager/add-enemy {:x 10 :y 10})
+    #_(reset! tmp 0))
+  (swap! tmp + elapsed)
+
   (swap! s/context update-in [:weapon-manager :shot-timer] + elapsed)
   (let [shots (->> @s/context
                    :weapon-manager :shots

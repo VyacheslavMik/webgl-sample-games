@@ -6,6 +6,7 @@
             [games.robot-rampage.player :as player]
             [games.robot-rampage.effects-manager :as effects-manager]
             [games.robot-rampage.weapon-manager :as weapon-manager]
+            [games.robot-rampage.enemy-manager :as enemy-manager]
             [games.robot-rampage.tile-map :as tile-map]))
 
 (defn draw* []
@@ -19,6 +20,7 @@
       (tile-map/draw*)
       (weapon-manager/draw*)
       (player/draw*)
+      (enemy-manager/draw*)
       (effects-manager/draw*))
 
     (when (= state :game-over))))
@@ -37,6 +39,7 @@
       (do
         (player/update*          elapsed)
         (weapon-manager/update*  elapsed)
+        (enemy-manager/update*   elapsed)
         (effects-manager/update* elapsed))
 
       :player-dead
@@ -73,4 +76,5 @@
   (effects-manager/init)
   (weapon-manager/init)
   (camera/init)
-  (tile-map/init))
+  (tile-map/init)
+  (enemy-manager/init))
