@@ -6,6 +6,7 @@
             [games.robot-rampage.tile-map :as tile-map]
             [games.robot-rampage.effects-manager :as effects-manager]
             [games.robot-rampage.path-finder :as path-finder]
+            [games.robot-rampage.sound-manager :as sound-manager]
             [games.robot-rampage.particle :as particle]))
 
 (def weapon-speed 600)
@@ -52,8 +53,7 @@
                  (sprite/set-frame frame)
                  (sprite/rotate-to velocity))]
     (swap! s/context update-in [:weapon-manager :shots] conj shot)
-    ;; sound manager play
-    ))
+    (sound-manager/play-player-shot)))
 
 (defn fire-weapon [location velocity]
   (let [current-weapon-type (get-in @s/context [:weapon-manager :current-weapon-type])]
@@ -97,8 +97,8 @@
                       (when (sprite/circle-colliding? (:enemy-base enemy)
                                                       location rocket-splash-raidus)
                         (swap! s/context assoc-in [:enemies i :destroyed?] true)
-                        ;; score
-                        ;; sound
+                        (swap! s/context update-in [:game-manager :score] + 10)
+                        (sound-manager/play-explosion)
                         (effects-manager/add-explosion (sprite/world-center (:enemy-base enemy))
                                                        {:x 0 :y 0}))))
                   (:enemies @s/context)))))
@@ -129,8 +129,8 @@
       (if impacts?
         (do
           (swap! s/context assoc-in [:enemies (:i impacts?) :destroyed?] true)
-          ;; score
-          ;; play explosion
+          (swap! s/context update-in [:game-manager :score] + 10)
+          (sound-manager/play-explosion)
           (if (= (:current-frame shot) 0)
             (effects-manager/add-explosion (sprite/world-center (:enemy-base impacts?))
                                            (u/vector-div (:velocity (:enemy-base impacts?)) 30))
@@ -196,8 +196,15 @@
       (swap! s/context assoc-in [:weapon-manager :weapon-time-remaining] @weapon-time-remaining))
     (swap! s/context assoc-in [:weapon-manager :powerups] powerups)))
 
+(defn check-weapon-upgrade-expire [elapsed]
+  (when-not (= (get-in @s/context [:weapon-manager :current-weapon-type]) :normal)
+    (swap! s/context update-in [:weapon-manager :weapon-time-remaining] - elapsed)
+    (when (<= (get-in @s/context [:weapon-manager :weapon-time-remaining]) 0)
+      (swap! s/context assoc-in [:weapon-manager :current-weapon-type] :normal))))
+
 (defn update* [elapsed]
   (swap! s/context update-in [:weapon-manager :shot-timer] + elapsed)
+  (check-weapon-upgrade-expire elapsed)
   (let [shots (->> @s/context
                    :weapon-manager :shots
                    (mapv (fn [shot]
