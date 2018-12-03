@@ -1,4 +1,5 @@
-(ns games.engine)
+(ns games.engine
+  (:require [goog.object]))
 
 (defonce context         (atom nil))
 (def     then            (atom 0))
@@ -135,7 +136,7 @@
 (defn prepare-rectangle [item rectangle]
   (let [data (.-data item)
         {:keys [color effect origin position size texture tex-coords]} rectangle
-        tex-size (.-texsize item)
+        tex-size (goog.object/get item "texsize")
         size (or size
                  (and tex-coords {:width (:w tex-coords)
                                   :height (:h tex-coords)})
@@ -166,10 +167,10 @@
 
         color (or color color-white)
 
-        r (.-r color)
-        g (.-g color)
-        b (.-b color)
-        a (.-a color)
+        r (goog.object/get color "r")
+        g (goog.object/get color "g")
+        b (goog.object/get color "b")
+        a (goog.object/get color "a")
 
         tex-coords (if (and tex-coords tex-size)
                      (let [{:keys [x y w h]} tex-coords
@@ -180,10 +181,10 @@
                            y1 (/ y height)]
                        #js {:tx1 x1 :tx2 x2 :ty1 y1 :ty2 y2})
                      #js {:tx1 0 :tx2 1 :ty1 0 :ty2 1})
-        tx1 (.-tx1 tex-coords)
-        tx2 (.-tx2 tex-coords)
-        ty1 (.-ty1 tex-coords)
-        ty2 (.-ty2 tex-coords)
+        tx1 (goog.object/get tex-coords "tx1")
+        tx2 (goog.object/get tex-coords "tx2")
+        ty1 (goog.object/get tex-coords "ty1")
+        ty2 (goog.object/get tex-coords "ty2")
 
         flip? (= (:type effect) :flip)]
     ;; v1
@@ -288,7 +289,9 @@
       (doseq [item (.-all rectangles)]
         (prepare-buffer ctx (.-data item))
         (.activeTexture gl (.-TEXTURE0 gl))
-        (.bindTexture gl (.-TEXTURE_2D gl) (.-texture item))
+        ;; (js/console.log (.-data item))
+        ;; (js/console.log (goog.object/get item "texture"))
+        (.bindTexture gl (.-TEXTURE_2D gl) (goog.object/get item "texture"))
         (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
         (.drawArrays gl (.-TRIANGLES gl) 0 (/ (count (.-data item)) 8))))))
 

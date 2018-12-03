@@ -61,8 +61,10 @@
   (vector-add rectangle point))
 
 (defn color-lerp [a b t]
-  (let [ar (.-r a) ag (.-g a) ab (.-b a) aa (.-a a)
-        br (.-r b) bg (.-g b) bb (.-b b) ba (.-a b)
+  (let [ar (goog.object/get a "r") ag (goog.object/get a "g")
+        ab (goog.object/get a "b") aa (goog.object/get a "a")
+        br (goog.object/get b "r") bg (goog.object/get b "g")
+        bb (goog.object/get b "b") ba (goog.object/get b "a")
         t (max 0 (min t 1))]
     #js {:r (+ ar (* (- br ar) t))
          :g (+ ag (* (- bg ag) t))

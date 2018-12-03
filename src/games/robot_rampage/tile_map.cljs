@@ -6,12 +6,12 @@
 
 (def tile-width 32)
 (def tile-height 32)
-(def map-width 50)
-(def map-height 50)
+(def ^:export map-width 50)
+(def ^:export map-height 50)
 
 (def floor-tile-start 0)
 (def floor-tile-end 3)
-(def wall-tile-start 4)
+(def ^:export wall-tile-start 4)
 (def wall-tile-end 7)
 
 (defn tile-rect [x y] {:x x :y y :w tile-width :h tile-height})
