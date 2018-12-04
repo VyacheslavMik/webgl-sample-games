@@ -117,12 +117,18 @@
                  (engine/color [1.0 0.3 0 0.5])
                  (engine/color [1.0 0.3 0 0])))
 
+(defn update-effects [effects elapsed]
+  (let [c (count effects)]
+    (loop [i 0
+           acc (transient [])]
+      (if (< i c)
+        (let [effect (particle/update* (nth effects i) elapsed)]
+          (recur (inc i) (if (:expired? effect) acc (conj! acc effect))))
+        (persistent! acc)))))
+
 (defn update* [elapsed]
   (let [effects (get-in @s/context [:effects-manager :effects])
-        effects (->> effects
-                     (mapv (fn [effect] (particle/update* effect elapsed)))
-                     (remove :expired?)
-                     (vec))]
+        effects (update-effects effects elapsed)]
     (swap! s/context assoc-in [:effects-manager :effects] effects)))
 
 (defn draw* []

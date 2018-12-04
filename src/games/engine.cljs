@@ -137,12 +137,10 @@
   (let [data (.-data item)
         {:keys [color effect origin position size texture tex-coords]} rectangle
         tex-size (goog.object/get item "texsize")
-        size (or size
-                 (and tex-coords {:width (:w tex-coords)
-                                  :height (:h tex-coords)})
-                 tex-size)
-        half-height (/ (:height size) 2)
-        half-width  (/ (:width size) 2)
+        width (or (:width size) (:w tex-coords) (:width tex-size))
+        height (or (:height size) (:h tex-coords) (:height tex-size))
+        half-height (/ height 2)
+        half-width  (/ width 2)
 
         vx1 (- half-width)  vx2 half-width
         vy1 (- half-height) vy2 half-height
@@ -229,24 +227,26 @@
       (.push data tx2 ty1)
       (.push data tx1 ty1))))
 
-(def rectangles #js {:current  nil
-                     :all      nil})
+(def rectangles #js {:val #js []})
 
 (defn new-rectangles []
-  (set! (.-current rectangles) nil)
-  (set! (.-all rectangles) (array)))
+  (set! (.. rectangles -val) #js []))
 
-(defn get-rectangle [texture]
-  (when (or (not (.-current rectangles))
-            (not= texture (.. rectangles -current -texture)))
-    (set! (.-current rectangles) #js {:texture texture
-                                      :texsize (get-in @context [:textures texture])
-                                      :data (array)})
-    (.push (.-all rectangles) (.-current rectangles)))
-  (.. rectangles -current))
+(defn get-rectangle [{:keys [texture depth] :or {depth 5}}]
+  (when-not (aget (.. rectangles -val) depth)
+    (aset (.. rectangles -val) depth #js {:current nil
+                                          :all (array)}))
+  (let [rects (aget (.. rectangles -val) depth)]
+    (when (or (not (.-current rects))
+              (not= texture (.. rects -current -texture)))
+      (set! (.. rects -current) #js {:texture texture
+                                     :texsize (get-in @context [:textures texture])
+                                     :data (array)})
+      (.push (.. rects -all) (.. rects -current)))
+    (.. (aget (.. rectangles -val) depth) -current)))
 
 (defn draw-rectangle [rectangle]
-  (prepare-rectangle (get-rectangle (:texture rectangle)) rectangle))
+  (prepare-rectangle (get-rectangle rectangle) rectangle))
 
 (defn prepare-vertex-attrib [{:keys [gl program-info]} k num-components stride offset]
   (let [type (.-FLOAT gl)
@@ -286,14 +286,14 @@
                        projection-matrix)
     (when draw-fn
       (draw-fn)
-      (doseq [item (.-all rectangles)]
-        (prepare-buffer ctx (.-data item))
-        (.activeTexture gl (.-TEXTURE0 gl))
-        ;; (js/console.log (.-data item))
-        ;; (js/console.log (goog.object/get item "texture"))
-        (.bindTexture gl (.-TEXTURE_2D gl) (goog.object/get item "texture"))
-        (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
-        (.drawArrays gl (.-TRIANGLES gl) 0 (/ (count (.-data item)) 8))))))
+      (doseq [rects (.. rectangles -val)]
+        (when rects
+          (doseq [item (.. rects -all)]
+            (prepare-buffer ctx (.-data item))
+            (.activeTexture gl (.-TEXTURE0 gl))
+            (.bindTexture gl (.-TEXTURE_2D gl) (goog.object/get item "texture"))
+            (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
+            (.drawArrays gl (.-TRIANGLES gl) 0 (/ (count (.-data item)) 8))))))))
 
 (defn handle-key-down [ev]
   (swap! context update :pressed-keys conj (keyword (.-code ev))))

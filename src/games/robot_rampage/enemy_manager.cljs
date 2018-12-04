@@ -18,12 +18,17 @@
                       (assoc :current-target-square square-location))]
     (swap! s/context update :enemies conj new-enemy)))
 
+(defn update-enemies [enemies elapsed]
+  (let [c (count enemies)]
+    (loop [i 0
+           acc (transient [])]
+      (if (< i c)
+        (let [enemy (enemy/update* (nth enemies i) elapsed)]
+          (recur (inc i) (if (:destroyed? enemy) acc (conj! acc enemy))))
+        (persistent! acc)))))
+
 (defn update* [elapsed]
-  (let [enemies (->> (:enemies @s/context)
-                     (mapv (fn [enemy]
-                             (enemy/update* enemy elapsed)))
-                     (remove :destroyed?)
-                     (vec))]
+  (let [enemies (update-enemies (:enemies @s/context) elapsed)]
     (swap! s/context assoc :enemies enemies)))
 
 (defn draw* []
