@@ -8,6 +8,7 @@
 
 (defonce context (atom {:layer :background
                         :mode :toggle-passable
+                        :position {:x 0 :y 0}
                         :code "CUSTOM"
                         :tile-index 0
                         :map-number "000"
@@ -71,6 +72,9 @@
     (.readAsText fr (aget (.. ev -target -files) 0)))
   (set! (.. ev -target -value) ""))
 
+(defn ^:export change-position [ev]
+  (swap! context assoc-in [:position :x] (js/parseInt (.. ev -target -value))))
+
 (defn fill-tiles []
   (let [tiles (.querySelector js/document "#tiles")]
     (loop [y 0]
@@ -113,6 +117,7 @@
   (tile-map/draw*))
 
 (defn update* [delta]
+  (camera/set-position (:position @context))
   (let [ms (engine/get-mouse-state)]
     (when (and (> (:x ms) 0) (< (:x ms) (camera/view-port-width))
                (> (:y ms) 0) (< (:y ms) (camera/view-port-height)))
@@ -133,6 +138,10 @@
                                  (:code-value @context)))))))
     (swap! context assoc :last-mouse-state ms)))
 
+(defn setup-scroll-bar []
+  (let [scroll-bar (.querySelector js/document "#bottom-range")]
+    (set! (.-max scroll-bar) (- (:width (camera/world-rectangle)) (camera/view-port-width)))))
+
 (when-not (:initialized? @context)
   (swap! context assoc :initialized? true)
   (fill-tiles)
@@ -148,4 +157,5 @@
                       :world-rectangle {:x 0 :y 0
                                         :width (* tile-map/tile-width tile-map/map-width)
                                         :height (* tile-map/tile-height tile-map/map-height)}})
+  (setup-scroll-bar)
   (engine/run))

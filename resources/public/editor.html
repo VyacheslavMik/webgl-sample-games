@@ -226,7 +226,8 @@
 	  <canvas id="textCanvas" width="800" height="600" tabindex="1"></canvas>
 	</div>
       </div>
-      <input type="range" min="0" max="1600" value="0" class="slider" id="bottom-range">
+      <input type="range" min="0" max="1600" value="0" class="slider" id="bottom-range"
+	     oninput="games.gemstone_hunter.editor.change_position(event)">
       <div class="codeorpassable">
 	<fieldset>
 	  <legend>Right Click Mode</legend>
