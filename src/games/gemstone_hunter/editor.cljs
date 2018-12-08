@@ -75,6 +75,9 @@
 (defn ^:export change-position [ev]
   (swap! context assoc-in [:position :x] (js/parseInt (.. ev -target -value))))
 
+(defn ^:export clear-map []
+  (tile-map/clear-map))
+
 (defn fill-tiles []
   (let [tiles (.querySelector js/document "#tiles")]
     (loop [y 0]
