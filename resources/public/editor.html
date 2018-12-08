@@ -33,6 +33,7 @@
       position: absolute;
       left: 0;
       top: 0;
+      outline: none;
       }
 
       #tools {
@@ -57,14 +58,204 @@
       height: 48px;
       border: 1px solid black;
       }
+
+      #middle {
+      display: flex;
+      height: 600px;
+      }
+
+      #bottom-range {
+      margin-left: 66px;
+      width: 800px;
+      }
+
+      #right-range {
+      height: 600px;
+      width: 15px;
+      writing-mode: bt-lr; /* IE */
+      -webkit-appearance: slider-vertical; /* WebKit */
+      }
+
+      /* Dropdown Button */
+      .dropbtn {
+      padding: 8px 16px;
+      font-size: 16px;
+      border: none;
+      }
+
+      .dropdown {
+      cursor: pointer;
+      position: relative;
+      display: inline-block;
+      }
+
+      .dropdown-content {
+      display: none;
+      flex-direction: column;
+      position: absolute;
+      background-color: #f1f1f1;
+      min-width: 160px;
+      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+      z-index: 1;
+      }
+
+      .dropdown-content a {
+      color: black;
+      padding: 12px 16px;
+      text-decoration: none;
+      display: block;
+      }
+
+      .dropdown-content a:hover {
+      background-color: #ddd;
+      }
+
+      .dropdown:hover .dropdown-content {
+      display: flex;
+      }
+
+      .dropdown:hover .dropbtn {
+      background-color: #f1f1f1;
+      }
+
+      .layer {
+      cursor: pointer;
+      padding: 8px 16px;
+      }
+
+      .layer label {
+      cursor: pointer;
+      }
+
+      .layer input {
+      cursor: pointer;
+      }
+
+      .layer:hover {
+      background-color: #ddd;
+      }
+
+      #file {
+      margin-left: 66px;
+      }
+
+      .codeorpassable fieldset {
+      display: flex;
+      flex-direction: column;
+      }
+
+      .item {
+      margin-bottom: 10px;
+      }
+
+      #code-value:disabled {
+      background-color: #e0e0e0;
+      }
+
+      #map-numbers {
+      margin-top: 10px;
+      }
+
+      .menu-entry {
+      color: black;
+      text-decoration: none;
+      display: flex;
+      position: relative;
+      }
+
+      .menu-entry span {
+      padding: 12px 16px;
+      }
+
+      .menu-entry input {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      opacity: 0;
+      cursor: pointer;
+      color: transparent;
+      }
+
+      .dropdown-content .menu-entry:hover {
+      background-color: #ddd;
+      }
     </style>
   </head>
   <body>
-    <div id="tiles"></div>
-    <!-- <div id="container"> -->
-    <!--   <canvas id="glCanvas" width="800" height="600"></canvas> -->
-    <!--   <canvas id="textCanvas" width="800" height="600" tabindex="1"></canvas> -->
-    <!-- </div> -->
+    <div id="editor">
+      <div class="dropdown" id="file">
+	<div class="dropbtn">File</div>
+	<div class="dropdown-content">
+	  <div class="menu-entry">
+	    <input type="file" onchange="games.gemstone_hunter.editor.load_map(event)">
+	    <span>Load map</span>
+	  </div>
+	  <a onclick="games.gemstone_hunter.editor.save_map()">Save map</a>
+	</div>
+      </div>
+      <div class="dropdown">
+	<div class="dropbtn">Tools</div>
+	<div class="dropdown-content">
+	  <a>Clear map</a>
+	</div>
+      </div>
+      <div class="dropdown">
+	<div class="dropbtn">Layers</div>
+	<div class="dropdown-content">
+	  <div class="layer">
+	    <input type="radio" id="background" name="layers" value="background" checked
+		   onchange="games.gemstone_hunter.editor.change_layer(event)">
+	    <label for="background">Background</label>
+	  </div>
+	  <div class="layer">
+	    <input type="radio" id="interactive" name="layers" value="interactive"
+		   onchange="games.gemstone_hunter.editor.change_layer(event)">
+	    <label for="interactive">Interactive</label>
+	  </div>
+	  <div class="layer">
+	    <input type="radio" id="foreground" name="layers" value="foreground"
+		   onchange="games.gemstone_hunter.editor.change_layer(event)">
+	    <label for="foreground">Foreground</label>
+	  </div>
+	</div>
+      </div>
+      <div id="middle">
+	<div id="tiles"></div>
+	<div id="container">
+	  <canvas id="glCanvas" width="800" height="600"></canvas>
+	  <canvas id="textCanvas" width="800" height="600" tabindex="1"></canvas>
+	</div>
+      </div>
+      <input type="range" min="0" max="1600" value="0" class="slider" id="bottom-range">
+      <div class="codeorpassable">
+	<fieldset>
+	  <legend>Right Click Mode</legend>
+	  <div class="item">
+	    <input type="radio" id="passable" name="codeorpassable" value="toggle-passable" checked
+		   onchange="games.gemstone_hunter.editor.change_mode(event)">
+	    <label for="passable">Toggle passable</label>
+	  </div>
+	  <div class="item">
+	    <input type="radio" id="code" name="codeorpassable" value="code"
+		   onchange="games.gemstone_hunter.editor.change_mode(event)">
+	    <label for="code">Code</label>
+	    <input type="text" id="code-value"
+		   oninput="games.gemstone_hunter.editor.custom_code(event)">
+	  </div>
+	  <select onchange="games.gemstone_hunter.editor.change_code(event)" id="codes">
+	    <option value="GEM">Gemstone</option>
+	    <option value="ENEMY">Enemy</option>
+	    <option value="DEAD">Lethal</option>
+	    <option value="BLOCK">EnemyBlocking</option>
+	    <option value="START">Start</option>
+	    <option value="CLEAR">Clear</option>
+	    <option value="CUSTOM" selected>Custom</option>
+	  </select>
+	</fieldset>
+	<select onchange="games.gemstone_hunter.editor.change_map_number(event)" id="map-numbers">
+	</select>
+      </div>
+    </div>
     <script src="js/gl-matrix-min.js" type="text/javascript"></script>
     <script src="js/path-finder.js" type="text/javascript"></script>
     <script src="js/compiled/main.js" type="text/javascript"></script>

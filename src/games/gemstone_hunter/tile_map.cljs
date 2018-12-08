@@ -41,6 +41,9 @@
                 (range map-width))))
   (clear-map))
 
+(defn set-editor-mode [b]
+  (swap! context assoc :editor-mode? b))
+
 (defn tile-source-rectangle [tile-index]
   {:x (* (mod tile-index tiles-per-row) tile-width)
    :y (* (Math/floor (/ tile-index tiles-per-row)) tile-height)
@@ -89,6 +92,13 @@
              (>= tile-y 0) (< tile-y map-height))
     (aset (:map-cells @context) tile-x tile-y tile)))
 
+(defn set-tile-at-cell [tile-x tile-y layer tile-index]
+  (when (and (>= tile-x 0) (< tile-x map-width)
+             (>= tile-y 0) (< tile-y map-height))
+    (let [tile (-> (aget (:map-cells @context) tile-x tile-y)
+                   (assoc layer tile-index))]
+      (aset (:map-cells @context) tile-x tile-y tile))))
+
 (defn cell-passable?
   ([cell]
    (cell-passable? (:x cell) (:y cell)))
@@ -124,12 +134,14 @@
       (engine/draw-rectangle {:texture texture
                               :position (cell-screen-rectangle x y)
                               :tex-coords (tile-source-rectangle 1)
-                              :color (engine/rgb-color [255 0 0 0])}))
+                              :color (engine/rgb-color [255 0 0 127])}))
     (when-let [code (:code (aget map-cells x y))]
       (let [screen-rect (cell-screen-rectangle x y)]
         (engine/draw-text {:text code
+                           :scale 0.7
+                           :align :start
                            :position {:x (:x screen-rect)
-                                      :y (:y screen-rect)}})))))
+                                      :y (+ (:y screen-rect) 5)}})))))
 
 (defn draw* []
   (let [{:keys [texture map-cells editor-mode?]} @context
@@ -193,4 +205,3 @@
     (aset map-cells x y
           (assoc (aget map-cells x y)
                  :code code))))
-    

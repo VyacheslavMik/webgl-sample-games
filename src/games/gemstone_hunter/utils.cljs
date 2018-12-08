@@ -60,6 +60,10 @@
 (defn rectangle-offset [rectangle point]
   (vector-add rectangle point))
 
+(defn rectangle-contains [rect x y]
+  (and (<= (:x rect) x) (< x (+ (:x rect) (:width rect)))
+       (<= (:y rect) y) (< y (+ (:y rect) (:height rect)))))
+
 (defn color-lerp [a b t]
   (let [ar (goog.object/get a "r") ag (goog.object/get a "g")
         ab (goog.object/get a "b") aa (goog.object/get a "a")

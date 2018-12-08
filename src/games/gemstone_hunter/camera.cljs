@@ -6,6 +6,12 @@
                     :view-port-height 0
                     :world-rectangle {:x 0 :y 0 :width 0 :height 0}}))
 
+(defn initialize [props]
+  (swap! context merge props))
+
+(defn set-position [pos]
+  (swap! context assoc :position pos))
+
 (defn transform-point [point]
   (u/vector-sub point (:position @context)))
 
@@ -16,6 +22,7 @@
 
 (defn view-port-width  [] (:view-port-width @context))
 (defn view-port-height [] (:view-port-height @context))
+(defn world-rectangle  [] (:world-rectangle @context))
 
 (defn view-port []
   (let [{:keys [position view-port-width view-port-height]} @context]
