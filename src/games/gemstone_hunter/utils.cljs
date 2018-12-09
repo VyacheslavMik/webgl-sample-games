@@ -4,7 +4,7 @@
   (+ (rand-int (- max min)) min))
 
 (defn clamp [v min-v max-v]
-  (min max-v (max v min-v)))
+  (max min-v (min v max-v)))
 
 (defn vector-sub [v1 v2]
   (-> v1

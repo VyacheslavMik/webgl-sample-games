@@ -145,20 +145,21 @@
   (let [scroll-bar (.querySelector js/document "#bottom-range")]
     (set! (.-max scroll-bar) (- (:width (camera/world-rectangle)) (camera/view-port-width)))))
 
-(when-not (:initialized? @context)
-  (swap! context assoc :initialized? true)
-  (fill-tiles)
-  (fill-map-numbers)
-  (set-disable-code-inputs)
-  (engine/init {:draw-fn draw*
-                :update-fn update*})
-  (tile-map/initialize
-   (engine/load-texture "textures/gemstone_hunter/PlatformTiles.png"))
-  (tile-map/set-editor-mode true)
-  (camera/initialize {:view-port-width 800
-                      :view-port-height 600
-                      :world-rectangle {:x 0 :y 0
-                                        :width (* tile-map/tile-width tile-map/map-width)
-                                        :height (* tile-map/tile-height tile-map/map-height)}})
-  (setup-scroll-bar)
-  (engine/run))
+(defn ^:export init []
+  (when-not (:initialized? @context)
+    (swap! context assoc :initialized? true)
+    (fill-tiles)
+    (fill-map-numbers)
+    (set-disable-code-inputs)
+    (engine/init {:draw-fn draw*
+                  :update-fn update*})
+    (tile-map/initialize
+     (engine/load-texture "textures/gemstone_hunter/PlatformTiles.png"))
+    (tile-map/set-editor-mode true)
+    (camera/initialize {:view-port-width 800
+                        :view-port-height 600
+                        :world-rectangle {:x 0 :y 0
+                                          :width (* tile-map/tile-width tile-map/map-width)
+                                          :height (* tile-map/tile-height tile-map/map-height)}})
+    (setup-scroll-bar)
+    (engine/run)))

@@ -45,7 +45,10 @@
 
 (defn load-texture [url]
   (when-let [{:keys [gl]} @context]
-    (let [texture (.createTexture gl)]
+    (let [texture (.createTexture gl)
+          res #js {:texture texture
+                   :width 0
+                   :height 0}]
       (.bindTexture gl (.-TEXTURE_2D gl) texture)
 
       (let [level 0
@@ -61,8 +64,8 @@
                      height border src-format src-type pixel)
         (set! (.-onload image)
               (fn []
-                (swap! context assoc-in [:textures texture] {:width (.-width image)
-                                                             :height (.-height image)})
+                (set! (.-width res)  (.-width image))
+                (set! (.-height res) (.-height image))
                 (.bindTexture gl (.-TEXTURE_2D gl) texture)
                 (.texImage2D gl (.-TEXTURE_2D gl) level internal-format
                              src-format src-type image)
@@ -74,7 +77,7 @@
                     (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
                     (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-LINEAR gl))))))
         (set! (.-src image) url))
-      texture)))
+      res)))
 
 (defn load-shader [gl type source]
   (let [shader (.createShader gl type)]
@@ -136,9 +139,10 @@
 (defn prepare-rectangle [item rectangle]
   (let [data (.-data item)
         {:keys [color effect origin position size texture tex-coords]} rectangle
-        tex-size (goog.object/get item "texsize")
-        width (or (:width size) (:w tex-coords) (:width tex-size))
-        height (or (:height size) (:h tex-coords) (:height tex-size))
+        twidth  (goog.object/get texture "width")
+        theight (goog.object/get texture "height")
+        width  (or (:width size)  (:w tex-coords) twidth)
+        height (or (:height size) (:h tex-coords) theight)
         half-height (/ height 2)
         half-width  (/ width 2)
 
@@ -170,13 +174,12 @@
         b (goog.object/get color "b")
         a (goog.object/get color "a")
 
-        tex-coords (if (and tex-coords tex-size)
+        tex-coords (if tex-coords
                      (let [{:keys [x y w h]} tex-coords
-                           {:keys [width height]} tex-size
-                           x2 (/ (+ x w) width)
-                           y2 (/ (+ y h) height)
-                           x1 (/ x width)
-                           y1 (/ y height)]
+                           x2 (/ (+ x w) twidth)
+                           y2 (/ (+ y h) theight)
+                           x1 (/ x twidth)
+                           y1 (/ y theight)]
                        #js {:tx1 x1 :tx2 x2 :ty1 y1 :ty2 y2})
                      #js {:tx1 0 :tx2 1 :ty1 0 :ty2 1})
         tx1 (goog.object/get tex-coords "tx1")
@@ -240,7 +243,6 @@
     (when (or (not (.-current rects))
               (not= texture (.. rects -current -texture)))
       (set! (.. rects -current) #js {:texture texture
-                                     :texsize (get-in @context [:textures texture])
                                      :data (array)})
       (.push (.. rects -all) (.. rects -current)))
     (.. (aget (.. rectangles -val) depth) -current)))
@@ -291,7 +293,7 @@
           (doseq [item (.. rects -all)]
             (prepare-buffer ctx (.-data item))
             (.activeTexture gl (.-TEXTURE0 gl))
-            (.bindTexture gl (.-TEXTURE_2D gl) (goog.object/get item "texture"))
+            (.bindTexture gl (.-TEXTURE_2D gl) (goog.object/get (goog.object/get item "texture") "texture"))
             (.uniform1i gl (-> program-info :uniform-locations :u-sampler) 0)
             (.drawArrays gl (.-TRIANGLES gl) 0 (/ (count (.-data item)) 8))))))))
 

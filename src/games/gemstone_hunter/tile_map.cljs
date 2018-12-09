@@ -167,13 +167,13 @@
                                                    (:background
                                                     (aget map-cells x y)))})
               (engine/draw-rectangle {:texture texture
-                                      :depth 1
+                                      :depth 5
                                       :position (cell-screen-rectangle x y)
                                       :tex-coords (tile-source-rectangle
                                                    (:interactive
                                                     (aget map-cells x y)))})
               (engine/draw-rectangle {:texture texture
-                                      :depth 2
+                                      :depth 9
                                       :position (cell-screen-rectangle x y)
                                       :tex-coords (tile-source-rectangle
                                                    (:foreground
