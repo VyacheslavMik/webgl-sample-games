@@ -71,42 +71,70 @@
         player))
     player))
 
+(defn touch-right [player]
+  (when-let [touch (engine/get-touch-state)]
+    (> 0 (- (:x (camera/world-to-screen-v (:world-location player)))
+            (:x (first touch))))))
+
+(defn touch-left [player]
+  (when-let [touch (engine/get-touch-state)]
+    (< 0 (- (:x (camera/world-to-screen-v (:world-location player)))
+            (:x (first touch))))))
+
+(defn touch-top [player]
+  (when-let [touch (engine/get-touch-state)]
+    (< 0 (- (:y (camera/world-to-screen-v (:world-location player)))
+            (:y (first touch))))))
+
 (defn not-dead-update [player elapsed]
   (if (:dead? player)
     player
     (let [new-animation (cond
-                          (engine/key-pressed? :KeyA)
+                          (or
+                           (engine/key-pressed? :KeyA)
+                           (touch-left player))
                           "run"
-                          
-                          (engine/key-pressed? :KeyD)
+
+                          (or
+                           (engine/key-pressed? :KeyD)
+                           (touch-right player))
                           "run"
                           
                           :else
                           "idle")
           velocity (cond
-                     (engine/key-pressed? :KeyA)
+                     (or
+                      (engine/key-pressed? :KeyA)
+                      (touch-left player))
                      {:x (- (:move-scale player)) :y (-> player :velocity :y)}
 
-                     (engine/key-pressed? :KeyD)
+                     (or (engine/key-pressed? :KeyD)
+                         (touch-right player))
                      {:x (:move-scale player) :y (-> player :velocity :y)}
 
                      :else
                      {:x 0 :y (-> player :velocity :y)})
 
           flipped? (cond
-                     (engine/key-pressed? :KeyA)
+                     (or
+                      (engine/key-pressed? :KeyA)
+                      (touch-left player))
                      false
-                     
-                     (engine/key-pressed? :KeyD)
+
+                     (or
+                      (engine/key-pressed? :KeyD)
+                      (touch-right player))
                      true
 
                      :else
                      (:flipped? player))
-          velocity (if (and (engine/key-pressed? :Space)
+          velocity (if (and (or (engine/key-pressed? :Space)
+                                (touch-top player))
                             (:on-ground? player))
                      (update velocity :y - 500)
                      velocity)
-          new-animation (if (and (engine/key-pressed? :Space)
+          new-animation (if (and (or (engine/key-pressed? :Space)
+                                     (touch-top player))
                                  (:on-ground? player))
                           "jump"
                           new-animation)
