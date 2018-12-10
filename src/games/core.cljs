@@ -8,6 +8,6 @@
 
 (enable-console-print!)
 
-(gemstone-hunter/init)
+(flood-control/init)
 
 (defn ^:export start []  (engine/run))

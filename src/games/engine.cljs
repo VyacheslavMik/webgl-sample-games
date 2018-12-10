@@ -170,6 +170,11 @@
             position (+ (:y position) half-height)
             :else    half-height)
 
+        vx1 (Math/floor vx1)
+        vy1 (Math/floor vy1)
+        x (Math/floor x)
+        y (Math/floor y)
+
         color (or color color-white)
 
         r (goog.object/get color "r")

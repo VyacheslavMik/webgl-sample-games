@@ -8,7 +8,6 @@
 (def tile-height 48)
 (def map-width 160)
 (def map-height 12)
-(def map-layers 3)
 (def tiles-per-row 10)
 
 (def sky-tile 2)
@@ -47,9 +46,9 @@
 
 (defn tile-source-rectangle [tile-index]
   {:x (* (mod tile-index tiles-per-row) tile-width)
-   :y (* (Math/floor (/ tile-index tiles-per-row)) tile-height)
-   :w tile-width
-   :h tile-height})
+     :y (* (Math/floor (/ tile-index tiles-per-row)) tile-height)
+     :w tile-width
+     :h tile-height})
 
 (defn get-cell-by-pixel-x [pixel-x] (Math/floor (/ pixel-x tile-width)))
 (defn get-cell-by-pixel-y [pixel-y] (Math/floor (/ pixel-y tile-height)))
