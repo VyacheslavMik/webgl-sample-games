@@ -96,10 +96,12 @@
 (defn update* [game-object elapsed]
   (if (:enabled? game-object)
     (let [game-object (update-animation game-object elapsed)
+          _ (reset! on-ground? (if (= (-> game-object :velocity :y) 0)
+                                 (:on-ground? game-object)
+                                 false))
           game-object (if (= (-> game-object :velocity :y) 0)
                         game-object
                         (assoc game-object :on-ground? false))
-          _ (reset! on-ground? (:on-ground? game-object))
           move-amount (-> (:velocity game-object)
                           (u/vector-mul elapsed)
                           (horizontal-collision-test game-object)

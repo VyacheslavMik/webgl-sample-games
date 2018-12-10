@@ -44,40 +44,43 @@
   (= (bit-and value (dec value)) 0))
 
 (defn load-texture [url]
-  (when-let [{:keys [gl]} @context]
-    (let [texture (.createTexture gl)
-          res #js {:texture texture
-                   :width 0
-                   :height 0}]
-      (.bindTexture gl (.-TEXTURE_2D gl) texture)
+  (when-let [{:keys [gl textures]} @context]
+    (if-let [res (get textures url)]
+      res
+      (let [texture (.createTexture gl)
+            res #js {:texture texture
+                     :width 0
+                     :height 0}]
+        (.bindTexture gl (.-TEXTURE_2D gl) texture)
 
-      (let [level 0
-            internal-format (.-RGBA gl)
-            width 1
-            height 1
-            border 0
-            src-format (.-RGBA gl)
-            src-type (.-UNSIGNED_BYTE gl)
-            pixel (js/Uint8Array. #js[0 0 255 255])
-            image (js/Image.)]
-        (.texImage2D gl (.-TEXTURE_2D gl) level internal-format width
-                     height border src-format src-type pixel)
-        (set! (.-onload image)
-              (fn []
-                (set! (.-width res)  (.-width image))
-                (set! (.-height res) (.-height image))
-                (.bindTexture gl (.-TEXTURE_2D gl) texture)
-                (.texImage2D gl (.-TEXTURE_2D gl) level internal-format
-                             src-format src-type image)
-                (if (and (is-power-of-2 (.-width image))
-                         (is-power-of-2 (.-height image)))
-                  (.generateMipmap gl (.-TEXTURE_2D gl))
-                  (do
-                    (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
-                    (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
-                    (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-LINEAR gl))))))
-        (set! (.-src image) url))
-      res)))
+        (let [level 0
+              internal-format (.-RGBA gl)
+              width 1
+              height 1
+              border 0
+              src-format (.-RGBA gl)
+              src-type (.-UNSIGNED_BYTE gl)
+              pixel (js/Uint8Array. #js[0 0 255 255])
+              image (js/Image.)]
+          (.texImage2D gl (.-TEXTURE_2D gl) level internal-format width
+                       height border src-format src-type pixel)
+          (set! (.-onload image)
+                (fn []
+                  (set! (.-width res)  (.-width image))
+                  (set! (.-height res) (.-height image))
+                  (.bindTexture gl (.-TEXTURE_2D gl) texture)
+                  (.texImage2D gl (.-TEXTURE_2D gl) level internal-format
+                               src-format src-type image)
+                  (if (and (is-power-of-2 (.-width image))
+                           (is-power-of-2 (.-height image)))
+                    (.generateMipmap gl (.-TEXTURE_2D gl))
+                    (do
+                      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
+                      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
+                      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-LINEAR gl))))))
+          (set! (.-src image) url))
+        (swap! context update :textures assoc url res)
+        res))))
 
 (defn load-shader [gl type source]
   (let [shader (.createShader gl type)]

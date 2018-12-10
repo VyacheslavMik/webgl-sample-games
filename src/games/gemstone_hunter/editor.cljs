@@ -124,7 +124,8 @@
   (let [ms (engine/get-mouse-state)]
     (when (and (> (:x ms) 0) (< (:x ms) (camera/view-port-width))
                (> (:y ms) 0) (< (:y ms) (camera/view-port-height)))
-      (let [x (:x ms) y (:y ms)]
+      (let [mouse-loc (camera/screen-to-world-v ms)
+            x (:x mouse-loc) y (:y mouse-loc)]
         (when (u/rectangle-contains (camera/world-rectangle) x y)
           (when (= (:button ms) :left)
             (tile-map/set-tile-at-cell (tile-map/get-cell-by-pixel-x x)
