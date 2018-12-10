@@ -1,5 +1,6 @@
 (ns games.gemstone-hunter.tile-map
   (:require [games.engine :as engine]
+            [cljs.reader]
             [games.gemstone-hunter.utils :as u]
             [games.gemstone-hunter.camera :as camera]))
 
