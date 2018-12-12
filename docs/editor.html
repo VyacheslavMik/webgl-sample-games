@@ -179,9 +179,40 @@
       .dropdown-content .menu-entry:hover {
       background-color: #ddd;
       }
+
+      #games {
+      display: flex;
+      font-size: 20px;
+      margin-bottom: 20px;
+      }
+
+      #games div, a {
+      cursor: pointer;
+      margin-left: 10px;
+      margin-right: 10px;
+      user-select: none;
+      text-decoration: none;
+      color: #808080;
+      }
+
+      #games div:hover, a:hover {
+      color: black;
+      }
+
+      #games .active-game {
+      color: black;
+      border-bottom: 1px solid black;
+      }
     </style>
   </head>
   <body onload="games.gemstone_hunter.editor.init()">
+    <div id="games">
+      <a href="/#flood-control">Flood Control</a>
+      <a href="/#asteroid-belt-assault">Asteroid Belt Assault</a>
+      <a href="/#robot-rampage">Robot Rampage</a>
+      <a href="/#gemstone-hunter">Gemstone Hunter</a>
+      <a href="#" class="active-game">Gemstone Hunter Map Editor</a>
+    </div>
     <div id="editor">
       <div class="dropdown" id="file">
 	<div class="dropbtn">File</div>

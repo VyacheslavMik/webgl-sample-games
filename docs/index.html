@@ -38,9 +38,52 @@
       #tools {
       display: flex;
       }
+
+      #games {
+      display: flex;
+      font-size: 20px;
+      margin-bottom: 20px;
+      }
+
+      #games div, a {
+      cursor: pointer;
+      margin-left: 10px;
+      margin-right: 10px;
+      user-select: none;
+      text-decoration: none;
+      color: #808080;
+      }
+
+      #games div:hover, a:hover {
+      color: black;
+      }
+
+      #games .active-game {
+      color: black;
+      border-bottom: 1px solid black;
+      }
+
+      #help {
+      margin-top: 0;
+      margin-bottom: 20px;
+      user-select: none;
+      }
     </style>
   </head>
   <body onload="games.core.start()">
+    <div>
+      <div id="games">
+	<div id="flood-control" onclick="games.core.set_hash('flood-control')">Flood Control</div>
+	<div id="asteroid-belt-assault"
+	     onclick="games.core.set_hash('asteroid-belt-assault')">
+	  Asteroid Belt Assault
+	</div>
+	<div id="robot-rampage" onclick="games.core.set_hash('robot-rampage')">Robot Rampage</div>
+	<div id="gemstone-hunter" onclick="games.core.set_hash('gemstone-hunter')">Gemstone Hunter</div>
+	<a href="editor.html">Gemstone Hunter Map Editor</a>
+      </div>
+    </div>
+    <pre id="help"></pre>
     <!-- <div id="tools"> -->
     <!--   <button onclick="games.core.start()">Start</button> -->
     <!--   <div id="fps"></div> -->
