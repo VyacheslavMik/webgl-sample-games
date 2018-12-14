@@ -6,10 +6,14 @@
                     :view-port-height 0
                     :world-rectangle {:x 0 :y 0 :width 0 :height 0}}))
 
+(def container (js/PIXI.Container.))
+
 (defn initialize [props]
   (swap! context merge props))
 
 (defn set-position [pos]
+  (set! (.. container -pivot -x) (:x pos))
+  (set! (.. container -pivot -y) (:y pos))
   (swap! context assoc :position pos))
 
 (defn transform-point [point]

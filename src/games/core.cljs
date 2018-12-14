@@ -4,6 +4,7 @@
             [games.asteroid-belt-assault.core :as asteroid-belt-assault]
             [games.robot-rampage.core         :as robot-rampage]
             [games.gemstone-hunter.core       :as gemstone-hunter]
+            [games.pixi]
             [games.gemstone-hunter.editor]))
 
 (enable-console-print!)
@@ -49,7 +50,7 @@ Mouse right button click - rotate counterclockwise"))
       (.. el -classList (add "active-game"))
       (init))))
 
-(let [h js/window.location.hash]
+#_(let [h js/window.location.hash]
   (case h
     "#asteroid-belt-assault"
     (activate-game h asteroid-belt-assault/init)
@@ -62,5 +63,6 @@ Mouse right button click - rotate counterclockwise"))
 
     (activate-game "#flood-control" flood-control/init)))
 
+#_(gemstone-hunter/init)
+
 (defn ^:export start []  (engine/run))
-  

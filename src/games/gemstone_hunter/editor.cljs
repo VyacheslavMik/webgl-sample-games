@@ -1,5 +1,7 @@
 (ns games.gemstone-hunter.editor
-  (:require [games.engine :as engine]
+  (:require [games.controls :as controls]
+            [games.game :as game]
+            [games.pixi :as pixi]
             [goog.string :as gstring]
             [goog.string.format]
             [games.gemstone-hunter.camera :as camera]
@@ -121,7 +123,7 @@
 
 (defn update* [delta]
   (camera/set-position (:position @context))
-  (let [ms (engine/get-mouse-state)]
+  (let [ms (controls/get-mouse-state)]
     (when (and (> (:x ms) 0) (< (:x ms) (camera/view-port-width))
                (> (:y ms) 0) (< (:y ms) (camera/view-port-height)))
       (let [mouse-loc (camera/screen-to-world-v ms)
@@ -152,15 +154,11 @@
     (fill-tiles)
     (fill-map-numbers)
     (set-disable-code-inputs)
-    (engine/init {:draw-fn draw*
-                  :update-fn update*})
-    (tile-map/initialize
-     (engine/load-texture "textures/gemstone_hunter/PlatformTiles.png"))
-    (tile-map/set-editor-mode true)
+    (tile-map/initialize true)
     (camera/initialize {:view-port-width 800
                         :view-port-height 600
                         :world-rectangle {:x 0 :y 0
                                           :width (* tile-map/tile-width tile-map/map-width)
                                           :height (* tile-map/tile-height tile-map/map-height)}})
     (setup-scroll-bar)
-    (engine/run)))
+    (game/run (pixi/init) update* camera/container)))
