@@ -1,35 +1,33 @@
 (ns games.gemstone-hunter.player
   (:require [clojure.string :as str]
             [games.engine :as engine]
+            [games.controls :as controls]
             [games.gemstone-hunter.utils :as u]
             [games.gemstone-hunter.camera :as camera]
             [games.gemstone-hunter.animation-strip :as anim]
             [games.gemstone-hunter.game-object :as game-object]
+            [games.gemstone-hunter.world :as world]
             [games.gemstone-hunter.tile-map :as tile-map]))
 
-(defn load-texture [name]
-  (engine/load-texture (str "textures/gemstone_hunter/Sprites/Player/" name)))
+(defn texture-path [name]
+  (str "textures/gemstone_hunter/Sprites/Player/" name))
 
 (defn new-player [load-level context]
   (let [ob (game-object/new-game-object)
-        animations {"idle" (-> (anim/new-animation-strip (load-texture "Idle.png")
-                                                         48
-                                                         "idle")
-                               (assoc :loop-animation? true))
-                    "run" (-> (anim/new-animation-strip (load-texture "Run.png")
-                                                        48
-                                                        "run")
-                              (assoc :loop-animation? true))
-                    "jump" (-> (anim/new-animation-strip (load-texture "Jump.png")
-                                                         48
-                                                         "jump")
+        animations {"idle" (-> (anim/new-animation-strip (texture-path "Idle.png") 48 "idle")
+                               (assoc :loop-animation? true)
+                               (anim/update-animation-strip))
+                    "run" (-> (anim/new-animation-strip (texture-path "Run.png") 48 "run")
+                              (assoc :loop-animation? true)
+                              (anim/update-animation-strip))
+                    "jump" (-> (anim/new-animation-strip (texture-path "Jump.png") 48 "jump")
                                (assoc :loop-animation? false
-                                      :frame-delay 0.08
-                                      :next-animation "idle"))
-                    "die" (-> (anim/new-animation-strip (load-texture "Die.png")
-                                                        48
-                                                        "die")
-                              (assoc :loop-animation? false))}]
+                                      :frame-delay 0.2
+                                      :next-animation "idle")
+                               (anim/update-animation-strip))
+                    "die" (-> (anim/new-animation-strip (texture-path "Die.png") 48 "die")
+                              (assoc :loop-animation? false)
+                              (anim/update-animation-strip))}]
     (-> ob
         (assoc :animations animations
                :world-location {:x -500 :y -500}
@@ -45,8 +43,7 @@
                :enabled? true
                :load-level load-level
                :context context
-               :code-based-blocks? false)
-        (game-object/play-animation "idle"))))
+               :code-based-blocks? false))))
 
 (defn play-animation [player animation]
   (if (= (:current-animation player) animation)
@@ -54,7 +51,7 @@
     (game-object/play-animation player animation)))
 
 (defn check-level-transition [player]
-  (if (engine/key-pressed? :KeyW)
+  (if (controls/key-pressed? :KeyW)
     (let [center-cell (tile-map/get-cell-by-pixel (game-object/world-center player))
           code (tile-map/cell-code-value center-cell)]
       (if (and code (str/starts-with? code "T_"))
@@ -72,17 +69,17 @@
     player))
 
 (defn touch-right [player]
-  (when-let [touch (engine/get-touch-state)]
+  (when-let [touch (controls/get-touch-state)]
     (> 0 (- (:x (camera/world-to-screen-v (:world-location player)))
             (:x (first touch))))))
 
 (defn touch-left [player]
-  (when-let [touch (engine/get-touch-state)]
+  (when-let [touch (controls/get-touch-state)]
     (< 0 (- (:x (camera/world-to-screen-v (:world-location player)))
             (:x (first touch))))))
 
 (defn touch-top [player]
-  (when-let [touch (engine/get-touch-state)]
+  (when-let [touch (controls/get-touch-state)]
     (< 0 (- (:y (camera/world-to-screen-v (:world-location player)))
             (:y (first touch))))))
 
@@ -91,12 +88,12 @@
     player
     (let [new-animation (cond
                           (or
-                           (engine/key-pressed? :KeyA)
+                           (controls/key-pressed? :KeyA)
                            (touch-left player))
                           "run"
 
                           (or
-                           (engine/key-pressed? :KeyD)
+                           (controls/key-pressed? :KeyD)
                            (touch-right player))
                           "run"
                           
@@ -104,11 +101,11 @@
                           "idle")
           velocity (cond
                      (or
-                      (engine/key-pressed? :KeyA)
+                      (controls/key-pressed? :KeyA)
                       (touch-left player))
                      {:x (- (:move-scale player)) :y (-> player :velocity :y)}
 
-                     (or (engine/key-pressed? :KeyD)
+                     (or (controls/key-pressed? :KeyD)
                          (touch-right player))
                      {:x (:move-scale player) :y (-> player :velocity :y)}
 
@@ -117,23 +114,23 @@
 
           flipped? (cond
                      (or
-                      (engine/key-pressed? :KeyA)
+                      (controls/key-pressed? :KeyA)
                       (touch-left player))
                      false
 
                      (or
-                      (engine/key-pressed? :KeyD)
+                      (controls/key-pressed? :KeyD)
                       (touch-right player))
                      true
 
                      :else
                      (:flipped? player))
-          velocity (if (and (or (engine/key-pressed? :Space)
+          velocity (if (and (or (controls/key-pressed? :Space)
                                 (touch-top player))
                             (:on-ground? player))
                      (update velocity :y - 500)
                      velocity)
-          new-animation (if (and (or (engine/key-pressed? :Space)
+          new-animation (if (and (or (controls/key-pressed? :Space)
                                      (touch-top player))
                                  (:on-ground? player))
                           "jump"

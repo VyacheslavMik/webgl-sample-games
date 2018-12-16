@@ -7,17 +7,27 @@
     (set! (.. container -height) 600)
     container))
 
-(def background-tile (new-container))
-(def interactive-tile (new-container))
-(def foreground-tile (new-container))
-(def interactive (new-container))
-(def editor (new-container))
+(defonce background-tile (let [c (new-container)]
+                           (.. camera/container (addChild c))
+                           c))
+(defonce interactive-tile (let [c (new-container)]
+                            (.. camera/container (addChild c))
+                            c))
+(defonce interactive (let [c (new-container)]
+                       (.. camera/container (addChild c))
+                       c))
+(defonce foreground-tile (let [c (new-container)]
+                           (.. camera/container (addChild c))
+                           c))
+(defonce editor (let [c (new-container)]
+                  (.. camera/container (addChild c))
+                  c))
 
-(.. camera/container (addChild background-tile))
-(.. camera/container (addChild interactive-tile))
-(.. camera/container (addChild interactive))
-(.. camera/container (addChild foreground-tile))
-(.. camera/container (addChild editor))
+(.. background-tile  removeChildren)
+(.. interactive-tile removeChildren)
+(.. foreground-tile  removeChildren)
+(.. interactive      removeChildren)
+(.. editor           removeChildren) 
 
 (defn add-background-tile [sprite]
   (.. background-tile (addChild sprite)))
@@ -28,8 +38,18 @@
 (defn add-interactive [sprite]
   (.. interactive (addChild sprite)))
 
+(defn remove-interactive [sprite]
+  (.. interactive (removeChild sprite)))
+
 (defn add-foreground-tile [sprite]
   (.. foreground-tile (addChild sprite)))
 
 (defn add-editor [sprite]
   (.. editor (addChild sprite)))
+
+(defn clear []
+  (.. background-tile removeChildren)
+  (.. interactive-tile removeChildren)
+  (.. foreground-tile removeChildren)
+  (.. interactive removeChildren)
+  (.. editor removeChildren))

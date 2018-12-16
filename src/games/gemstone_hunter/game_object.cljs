@@ -27,6 +27,7 @@
     game-object
     (if (get (:animations game-object) name)
       (-> game-object
+          (update-in [:animations (:current-animation game-object)] anim/stop)
           (assoc :current-animation name)
           (update-in [:animations name] anim/play))
       game-object)))
@@ -120,6 +121,13 @@
           velocity (if (= (:y move-amount) 0)
                      (assoc velocity :y 0)
                      velocity)]
+      (when-let [sprite (:draw (get (:animations game-object) (:current-animation game-object)))]
+        (case (:flipped? game-object)
+          true  (set! (.. sprite -scale -x) -1)
+          false (set! (.. sprite -scale -x) 1)
+          nil)
+        (.. sprite -position (set (+ (:x new-position) (/ (.. sprite -width) 2))
+                                  (:y new-position))))
       (assoc game-object
              :on-ground? @on-ground?
              :world-location new-position
@@ -141,13 +149,3 @@
    :draw-depth 5
    :animations {}
    :current-animation nil})
-
-(defn draw* [game-object]
-  (when (:enabled? game-object)
-    (when-let [animation (get (:animations game-object) (:current-animation game-object))]
-      (let [effect (when (:flipped? game-object) {:type :flip})]
-        (engine/draw-rectangle {:texture (:texture animation)
-                                :position (camera/world-to-screen-r (world-rectangle game-object))
-                                :tex-coords (anim/frame-rectangle animation)
-                                :depth (:draw-depth game-object)
-                                :effect effect})))))

@@ -4,14 +4,15 @@
             [games.gemstone-hunter.animation-strip :as anim]
             [games.gemstone-hunter.game-object :as game-object]))
 
-(defn load-texture []
-  (engine/load-texture "textures/gemstone_hunter/Gem.png"))
+(defn texture-path []
+  "textures/gemstone_hunter/Gem.png")
 
 (defn new-gemstone [cell-x cell-y]
   (let [ob (game-object/new-game-object)
-        animations {"idle" (-> (anim/new-animation-strip (load-texture) 48 "idle")
+        animations {"idle" (-> (anim/new-animation-strip (texture-path) 48 "idle")
                                (assoc :loop-animation? true
-                                      :frame-delay 0.15))}]
+                                      :frame-delay 0.15)
+                               (anim/update-animation-strip))}]
     (-> ob
         (assoc :animations animations
                :world-location {:x (* cell-x tile-map/tile-width)

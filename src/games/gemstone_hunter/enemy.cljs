@@ -6,23 +6,26 @@
             [games.gemstone-hunter.game-object :as game-object]))
 
 (defn load-texture [type name]
-  (engine/load-texture (str "textures/gemstone_hunter/Sprites/Monster" type "/" name)))
+  (str "textures/gemstone_hunter/Sprites/Monster" type "/" name))
 
 (defn new-enemy [cell-x cell-y type]
   (let [ob (game-object/new-game-object)
         animations {"idle" (-> (anim/new-animation-strip (load-texture type "Idle.png")
                                                          48
                                                          "idle")
-                               (assoc :loop-animation? true))
+                               (assoc :loop-animation? true)
+                               (anim/update-animation-strip))
                     "run" (-> (anim/new-animation-strip (load-texture type "Run.png")
                                                         48
                                                         "run")
                               (assoc :loop-animation? true
-                                     :frame-delay 0.1))
+                                     :frame-delay 0.2)
+                              (anim/update-animation-strip))
                     "die" (-> (anim/new-animation-strip (load-texture type "Die.png")
                                                         48
                                                         "die")
-                              (assoc :loop-animation? false))}]
+                              (assoc :loop-animation? false)
+                              (anim/update-animation-strip))}]
     (-> ob
         (assoc :animations animations
                :world-location {:x (* cell-x tile-map/tile-width) :y (* cell-y tile-map/tile-height)}

@@ -188,62 +188,6 @@
    (get-map-square-at-cell (get-cell-by-pixel-x pixel-x)
                            (get-cell-by-pixel-y pixel-y))))
 
-(defn draw-edit-mode-items [map-cells texture x y]
-  (when-not (or (< x 0) (>= x map-width)
-                (< y 0) (>= y map-height))
-    (when-not (cell-passable? x y)
-      (engine/draw-rectangle {:texture texture
-                              :position (cell-screen-rectangle x y)
-                              :tex-coords (tile-source-rectangle 1)
-                              :color (engine/rgb-color [255 0 0 127])}))
-    (when-let [code (:code (aget map-cells x y))]
-      (let [screen-rect (cell-screen-rectangle x y)]
-        (engine/draw-text {:text code
-                           :scale 0.7
-                           :align :start
-                           :position {:x (:x screen-rect)
-                                      :y (+ (:y screen-rect) 5)}})))))
-
-(defn draw* []
-  (let [{:keys [texture map-cells editor-mode?]} @context
-        {{x :x y :y} :position
-         view-port-width :view-port-width
-         view-port-height :view-port-height} @camera/context
-
-        start-x (get-cell-by-pixel-x x)
-        end-x   (get-cell-by-pixel-x (+ x view-port-width))
-
-        start-y (get-cell-by-pixel-y y)
-        end-y   (get-cell-by-pixel-y (+ y view-port-height))]
-    (loop [x start-x]
-      (when (<= x end-x)
-        (loop [y start-y]
-          (when (<= y end-y)
-            (when (and (>= x 0) (< x map-width)
-                       (>= y 0) (< y map-height))
-              (engine/draw-rectangle {:texture texture
-                                      :position (cell-screen-rectangle x y)
-                                      :depth 0
-                                      :tex-coords (tile-source-rectangle
-                                                   (:background
-                                                    (aget map-cells x y)))})
-              (engine/draw-rectangle {:texture texture
-                                      :depth 5
-                                      :position (cell-screen-rectangle x y)
-                                      :tex-coords (tile-source-rectangle
-                                                   (:interactive
-                                                    (aget map-cells x y)))})
-              (engine/draw-rectangle {:texture texture
-                                      :depth 9
-                                      :position (cell-screen-rectangle x y)
-                                      :tex-coords (tile-source-rectangle
-                                                   (:foreground
-                                                    (aget map-cells x y)))}))
-            (when editor-mode?
-              (draw-edit-mode-items map-cells texture x y))
-            (recur (inc y))))
-        (recur (inc x))))))
-
 (defn save-map []
   (str
    (mapv (fn [a]

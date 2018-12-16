@@ -53,7 +53,6 @@
   (swap! context assoc :code-value (.. ev -target -value)))
 
 (defn ^:export change-map-number [ev]
-  (println (.. ev -target -value))
   (swap! context assoc :map-number (.. ev -target -value)))
 
 (defn ^:export save-map []
@@ -117,9 +116,6 @@
         (set! (.-textContent map-number) (gstring/format "%03d" i))
         (set! (.-value map-number) (gstring/format "%03d" i))
         (.appendChild map-numbers map-number)))))
-
-(defn draw* []
-  (tile-map/draw*))
 
 (defn update* [delta]
   (camera/set-position (:position @context))

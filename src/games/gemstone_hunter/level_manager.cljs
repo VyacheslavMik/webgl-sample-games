@@ -6,6 +6,8 @@
             [games.gemstone-hunter.gemstone :as gem]
             [games.gemstone-hunter.enemy :as enemy]
             [games.gemstone-hunter.game-object :as game-object]
+            [games.gemstone-hunter.world :as world]
+            [games.gemstone-hunter.animation-strip :as anim]
             [games.gemstone-hunter.tile-map :as tile-map]))
 
 (def context (atom {}))
@@ -17,11 +19,18 @@
     2 "C"
     3 "D"))
 
+(defn remove-object [game-object]
+  (doseq [[_ animation] (:animations game-object)]
+    (anim/stop animation)))
+
 (defn load-level [level-number]
+  (swap! context assoc :loading? true)
   (-> (js/fetch (gstring/format "maps/gemstone_hunter/MAP%03d" level-number))
       (.then (fn [response]
                (.text response)))
       (.then (fn [s]
+               (swap! context assoc :loading? false)
+               (world/clear)
                (tile-map/load-map s)
                (swap! context assoc :gemstones [])
                (swap! context assoc :enemies [])
@@ -29,8 +38,12 @@
                  (dotimes [y tile-map/map-height]
                    (let [code (tile-map/cell-code-value x y)]
                      (when (= code "START")
-                       (swap! context assoc-in [:player :world-location] {:x (* x tile-map/tile-width)
-                                                                          :y (* y tile-map/tile-height)}))
+                       (swap! context update :player
+                              (fn [player]
+                                (-> player
+                                    (assoc :world-location {:x (* x tile-map/tile-width)
+                                                            :y (* y tile-map/tile-height)})
+                                    (player/play-animation "idle")))))
                      (when (= code "GEM")
                        (swap! context update :gemstones conj (gem/new-gemstone x y)))
                      (when (= code "ENEMY")
@@ -40,13 +53,6 @@
 
 (defn init []
   (swap! context assoc :player (player/new-player load-level context)))
-
-(defn draw* []
-  (game-object/draw* (:player @context))
-  (doseq [gem (:gemstones @context)]
-    (game-object/draw* gem))
-  (doseq [enemy (:enemies @context)]
-    (game-object/draw* enemy)))
 
 (defn check-current-cell-code [player]
   (if (:dead? player)
@@ -60,10 +66,13 @@
   (let [gemstones (mapv (fn [gem] (game-object/update* gem elapsed)) gemstones)
         c (count gemstones)
         gemstones (filterv (fn [gem]
-                             (not
-                              (u/rectangle-intersects?
-                               (game-object/collision-rectangle player)
-                               (game-object/collision-rectangle gem))))
+                             (let [alive? (not
+                                           (u/rectangle-intersects?
+                                            (game-object/collision-rectangle player)
+                                            (game-object/collision-rectangle gem)))]
+                               (when-not alive?
+                                 (remove-object gem))
+                               alive?))
                            gemstones)
         score (- c (count gemstones))]
     {:gemstones gemstones
@@ -77,7 +86,9 @@
               (if (:dead? enemy)
                 (if (:enabled? enemy)
                   (update acc :enemies conj enemy)
-                  acc)
+                  (do
+                    (remove-object enemy)
+                    acc))
                 (if (u/rectangle-intersects?
                      (game-object/collision-rectangle player)
                      (game-object/collision-rectangle enemy))
@@ -100,14 +111,15 @@
             {:player player :enemies []} enemies)))
 
 (defn update* [elapsed]
-  (let [{:keys [player gemstones enemies]} @context
-        player (-> (player/update* player elapsed)
-                   (check-current-cell-code))
-        {:keys [player gemstones]} (update-gemstones player gemstones elapsed)
-        {:keys [player enemies]}   (update-enemies   player enemies   elapsed)]
-    (swap! context assoc :player player)
-    (swap! context assoc :gemstones gemstones)
-    (swap! context assoc :enemies enemies)))
+  (when-not (:loading? @context)
+    (let [{:keys [player gemstones enemies]} @context
+          player (-> (player/update* player elapsed)
+                     (check-current-cell-code))
+          {:keys [player gemstones]} (update-gemstones player gemstones elapsed)
+          {:keys [player enemies]}   (update-enemies   player enemies   elapsed)]
+      (swap! context assoc :player player)
+      (swap! context assoc :gemstones gemstones)
+      (swap! context assoc :enemies enemies))))
 
 (defn reload-level []
   (let [save-respawn (:respawn-location @context)]

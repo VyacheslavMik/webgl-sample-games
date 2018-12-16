@@ -6,7 +6,10 @@
                     :view-port-height 0
                     :world-rectangle {:x 0 :y 0 :width 0 :height 0}}))
 
-(def container (js/PIXI.Container.))
+(defonce container (let [container (js/PIXI.Container.)]
+                     (set! (.. container -width) 800)
+                     (set! (.. container -height) 600)
+                     container))
 
 (defn initialize [props]
   (swap! context merge props))
@@ -36,12 +39,16 @@
 
 (defn move [offset]
   (let [{:keys [position world-rectangle view-port-width view-port-height]} @context
-        position {:x (u/clamp (+ (:x position) (:x offset))
-                              (:x world-rectangle)
-                              (- (:width world-rectangle) view-port-width))
-                  :y (u/clamp (+ (:y position) (:y offset))
-                              (:y world-rectangle)
-                              (- (:height world-rectangle) view-port-height))}]
+        position {:x (Math/floor
+                      (u/clamp (+ (:x position) (:x offset))
+                               (:x world-rectangle)
+                               (- (:width world-rectangle) view-port-width)))
+                  :y (Math/floor
+                      (u/clamp (+ (:y position) (:y offset))
+                               (:y world-rectangle)
+                               (- (:height world-rectangle) view-port-height)))}]
+    (set! (.. container -pivot -x) (:x position))
+    (set! (.. container -pivot -y) (:y position))
     (swap! context assoc :position position)))
 
 (defn object-visible? [bounds]

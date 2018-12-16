@@ -4,4 +4,5 @@
 (defn run [app update* root]
   (.. app -stage (addChild root))
   (controls/register-events (.. app -view))
-  (.. app -ticker (add update*)))
+  (.. app -ticker (add (fn [_]
+                         (update* (.. app -ticker -elapsedMS))))))

@@ -1,49 +1,55 @@
 (ns games.gemstone-hunter.animation-strip
-  (:require [goog.object]))
+  (:require [goog.object]
+            [games.gemstone-hunter.world :as world]))
 
-(defn frame-count [animation-strip]
-  (/ (goog.object/get (:texture animation-strip) "width") (:frame-width animation-strip)))
+(defn load-animation [path width]
+  (let [base-texture (js/PIXI.BaseTexture.fromImage path true js/PIXI.SCALE_MODES.NEAREST)
+        height (.. base-texture -height)
+        frame-count (Math/floor (/ (.. base-texture -width) width))
+        frames (to-array
+                (for [i (range frame-count)]
+                  (js/PIXI.Texture. base-texture
+                                    (js/PIXI.Rectangle. (* i width) 0 width height)
+                                    (js/PIXI.Rectangle. (* i width) 0 width height))))
+        animation (js/PIXI.extras.AnimatedSprite. frames)]
+    (.. animation -position (set -500 -500))
+    (set! (.. animation -anchor -x) 0.5)
+    animation))
 
-(defn frame-rectangle [animation-strip]
-  {:x (* (:current-frame animation-strip) (:frame-width animation-strip))
-   :y 0
-   :w (:frame-width animation-strip)
-   :h (goog.object/get (:texture animation-strip) "height")})
+(defn new-animation-strip [path frame-width name]
+  (let [animation (load-animation path frame-width)]
+    {:texture path
+     :draw animation
+     :frame-width frame-width
+     :frame-timer 0
+     :frame-delay 0.2
+     :current-frame 0
+     :loop-animation? true
+     :finished-playing? false
+     :next-animation nil
+     :name name}))
 
-(defn new-animation-strip [texture frame-width name]
-  {:texture texture
-   :frame-width frame-width
-   :frame-timer 0
-   :frame-delay 0.05
-   :current-frame 0
-   :loop-animation? true
-   :finished-playing? false
-   :next-animation nil
-   :name name})
+(defn update-animation-strip [animation-strip]
+  (let [sprite (:draw animation-strip)]
+    (set! (.. sprite -loop)           (:loop-animation? animation-strip))
+    (set! (.. sprite -animationSpeed) (:frame-delay animation-strip))
+    animation-strip))
 
 (defn play [animation-strip]
+  (when-let [sprite (:draw animation-strip)]
+    (world/add-interactive sprite)
+    (.. sprite (gotoAndPlay 0)))
   (assoc animation-strip
          :current-frame 0
          :finished-playing? false))
 
-(defn check-frame [animation-strip]
-  (if (>= (:current-frame animation-strip) (frame-count animation-strip))
-    (if (:loop-animation? animation-strip)
-      (assoc animation-strip :current-frame 0)
-      (assoc animation-strip
-             :current-frame (dec (frame-count animation-strip))
-             :finished-playing? true))
-    animation-strip))
-
-(defn check-timer [animation-strip]
-  (if (>= (:frame-timer animation-strip) (:frame-delay animation-strip))
-    (-> animation-strip
-        (update :current-frame inc)
-        (assoc :frame-timer 0))
-    animation-strip))
+(defn stop [animation-strip]
+  (when-let [sprite (:draw animation-strip)]
+    (world/remove-interactive sprite)
+    (.. sprite stop))
+  animation-strip)
 
 (defn update* [animation-strip elapsed]
-  (-> animation-strip
-      (update :frame-timer + elapsed)
-      (check-timer)
-      (check-frame)))
+  (if (.. (:draw animation-strip) -playing)
+    animation-strip
+    (assoc animation-strip :finished-playing? true)))

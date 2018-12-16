@@ -50,7 +50,7 @@ Mouse right button click - rotate counterclockwise"))
       (.. el -classList (add "active-game"))
       (init))))
 
-#_(let [h js/window.location.hash]
+(let [h js/window.location.hash]
   (case h
     "#asteroid-belt-assault"
     (activate-game h asteroid-belt-assault/init)
@@ -62,7 +62,5 @@ Mouse right button click - rotate counterclockwise"))
     (activate-game h gemstone-hunter/init)
 
     (activate-game "#flood-control" flood-control/init)))
-
-#_(gemstone-hunter/init)
 
 (defn ^:export start []  (engine/run))
