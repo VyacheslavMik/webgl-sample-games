@@ -1,6 +1,5 @@
 (ns games.gemstone-hunter.core
-  (:require [games.engine :as engine]
-            [games.gemstone-hunter.level-manager :as level-manager]
+  (:require [games.gemstone-hunter.level-manager :as level-manager]
             [games.gemstone-hunter.tile-map :as tile-map]
             [games.gemstone-hunter.player :as player]
             [games.gemstone-hunter.game-object :as game-object]

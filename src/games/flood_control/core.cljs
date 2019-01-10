@@ -1,5 +1,7 @@
 (ns games.flood-control.core
-  (:require [games.engine :as engine]
+  (:require [games.pixi :as pixi]
+            [games.game :as game]
+            [games.controls :as controls]
             [clojure.string :as str]))
 
 (def context (atom {:state :title-screen
@@ -15,6 +17,47 @@
                     :rotating-pieces {}
                     :fading-pieces {}}))
 
+(defonce root (let [container (js/PIXI.Container.)]
+                (set! (.. container -width) 800)
+                (set! (.. container -height) 600)
+                container))
+
+(defonce board (let [container (js/PIXI.Container.)]
+                 (set! (.. container -width) 800)
+                 (set! (.. container -height) 600)
+                 container))
+
+(defonce title-screen (let [sprite (js/PIXI.Sprite.
+                                    (js/PIXI.Texture.fromImage
+                                     "textures/flood_control/title_screen.png"))]
+                        (set! (.. sprite -width) 800)
+                        (set! (.. sprite -height) 600)
+                        sprite))
+
+(defonce background (let [sprite (js/PIXI.Sprite.
+                                  (js/PIXI.Texture.fromImage
+                                   "textures/flood_control/background.png"))]
+                      (set! (.. sprite -width) 800)
+                      (set! (.. sprite -height) 600)
+                      sprite))
+
+(defonce game-over-text (let [text (js/PIXI.Text. "G A M E  O V E R !"
+                                                  #js{:fontFamily "Arial"
+                                                      :fontSize 48
+                                                      :fill "white"})]
+                          (.. text -position (set 400 300))
+                          (.. text -anchor (set 0.5))
+                          (set! (.. text -visible) false)
+                          text))
+
+(defonce paused-text (let [text (js/PIXI.Text. "P A U S E D"
+                                               #js{:fontFamily "Arial"
+                                                   :fontSize 48
+                                                   :fill "white"})]
+                       (.. text -position (set 400 300))
+                       (.. text -anchor (set 0.5))
+                       (set! (.. text -visible) false)
+                       text))
 
 (def board-width  8)
 (def board-height 10)
@@ -122,7 +165,7 @@
   (generate-new-pieces false))
 
 (defn draw-background [textures]
-  (engine/draw-rectangle
+  #_(engine/draw-rectangle
    {:texture (:background textures)}))
 
 (defn get-source-rect [piece]
@@ -144,11 +187,11 @@
     (doseq [y (range board-height)]
       (let [px (+ game-board-display-position-x (* x piece-width))
             py (+ game-board-display-position-y (* y piece-height))]
-        (engine/draw-rectangle
+        #_(engine/draw-rectangle
          {:texture (:tile-sheet textures)
           :position {:x px :y py}
           :tex-coords (get-source-rect {:piece-type :empty})})
-        (let [drawn? (when-let [piece (get fading-pieces {:x x :y y})]
+        #_(let [drawn? (when-let [piece (get fading-pieces {:x x :y y})]
                        (engine/draw-rectangle
                         {:texture (:tile-sheet textures)
                          :position {:x px :y py}
@@ -183,7 +226,8 @@
   (let [{:keys [textures state board] :as ctx} @context]
     (case state
       :title-screen
-      (engine/draw-rectangle
+      (do )
+      #_(engine/draw-rectangle
        {:texture (:title-screen textures)})
 
       :playing
@@ -191,7 +235,7 @@
         (draw-background textures)
 
         (let [water-height (* max-water-height (/ (:flood-count ctx) 100))]
-          (engine/draw-rectangle
+          #_(engine/draw-rectangle
            {:texture (:background textures)
             :position {:x (:x water-position)
                        :y (+ (:y water-position) (- max-water-height water-height))}
@@ -203,18 +247,18 @@
 
         (draw-board ctx)
 
-        (doseq [score-zoom (:score-zooms ctx)]
+        #_(doseq [score-zoom (:score-zooms ctx)]
           (engine/draw-text {:position {:x 400 :y 300}
                              :text (:text score-zoom)
                              :color (:color score-zoom)
                              :scale (:scale score-zoom)}))
 
-        (engine/draw-text {:text (:player-score ctx)
+        #_(engine/draw-text {:text (:player-score ctx)
                            :font {:size 36}
                            :align :start
                            :color (engine/color [0.0 0.0 0.0 1.0])
                            :position score-position})
-        (engine/draw-text {:text (:current-level ctx)
+        #_(engine/draw-text {:text (:current-level ctx)
                            :font {:size 36}
                            :align :start
                            :color (engine/color [0.0 0.0 0.0 1.0])
@@ -224,13 +268,14 @@
       (do
         (draw-background textures)
         (draw-board ctx)
-        (engine/draw-text {:position {:x 400 :y 300}
+        #_(engine/draw-text {:position {:x 400 :y 300}
                            :scale 7
                            :color (engine/color [1.0 0.0 0.0 0.7])
                            :text "GAME OVER"}))
       
       :paused
-      (engine/draw-text {:position {:x 400 :y 300}
+      (do )
+      #_(engine/draw-text {:position {:x 400 :y 300}
                          :scale 7
                          :text "P A U S E D"})
 
@@ -376,7 +421,7 @@
       (swap! context assoc-in [:board x y :piece-type] piece-type))))
 
 (defn handle-mouse-input []
-  (when-let [mouse-state (engine/get-mouse-state)]
+  #_(when-let [mouse-state (engine/get-mouse-state)]
     (let [x (Math/floor (/ (- (:x mouse-state) game-board-display-position-x) piece-width))
           y (Math/floor (/ (- (:y mouse-state) game-board-display-position-y) piece-height))]
       (when (and (>= x 0) (< x board-width)
@@ -396,7 +441,7 @@
         (swap! context assoc :time-since-last-input 0)))))
 
 (defn handle-touch-input []
-  (when-let [touch-state (engine/get-touch-state)]
+  #_(when-let [touch-state (engine/get-touch-state)]
     (let [x (Math/floor (/ (- (:x touch-state) game-board-display-position-x) piece-width))
           y (Math/floor (/ (- (:y touch-state) game-board-display-position-y) piece-height))]
       (when (and (>= x 0) (< x board-width)
@@ -412,7 +457,9 @@
   (let [{:keys [state]} @context]
     (case state
       :title-screen
-      (when (or (engine/key-pressed? :Space) (engine/get-touch-state))
+      (when (or (controls/key-pressed? :Space) (controls/get-touch-state))
+        (set! (.. title-screen -visible) false)
+        (set! (.. board -visible) true)
         (new-board)
         (clear-board)
         (generate-new-pieces false)
@@ -461,7 +508,7 @@
                                                                :scale 0.4
                                                                :last-scale-amount 0.0
                                                                :scale-amount 0.4
-                                                               :color (engine/color [1.0 0.0 0.0 0.4])})
+                                                               #_:color #_(engine/color [1.0 0.0 0.0 0.4])})
 
                       (doseq [scoring-square chain]
                         (let [x (:x scoring-square)
@@ -481,7 +528,9 @@
         (swap! context update :score-zooms update-score-zooms)
 
         (when (and (>= (:time-since-last-input @context) min-time-since-last-input)
-                   (engine/key-pressed? :KeyP))
+                   (controls/key-pressed? :KeyP))
+          (set! (.. board -visible) false)
+          (set! (.. paused-text -visible) true)
           (swap! context assoc :time-since-last-input 0)
           (swap! context assoc :state :paused)))
 
@@ -495,7 +544,9 @@
       (do
         (swap! context update :time-since-last-input + (* delta 0.001))
         (when (and (>= (:time-since-last-input @context) min-time-since-last-input)
-                   (engine/key-pressed? :KeyP))
+                   (controls/key-pressed? :KeyP))
+          (set! (.. board -visible) true)
+          (set! (.. paused-text -visible) false)
           (swap! context assoc :time-since-last-input 0)
           (swap! context assoc :state :playing)))
 
@@ -505,10 +556,25 @@
   (str "textures/flood_control/" tex-name))
 
 (defn init []
-  (engine/init {:draw-fn   draw*
+  (when-not (:initialized? @context)
+    (.. root (addChild title-screen))
+    (.. root (addChild board))
+    (.. root (addChild paused-text))
+    (.. root (addChild game-over-text))
+
+    (set! (.. board -visible) false)
+
+    (.. board (addChild background))
+    (game/run (pixi/init
+               ["textures/flood_control/title_screen.png"
+                "textures/flood_control/background.png"
+                "textures/flood_control/tile_sheet.png"]
+               #()) update* root)
+    (swap! context assoc :initialized? true))
+  #_(engine/init {:draw-fn   draw*
                 :update-fn update*
                 :show-fps? true})
 
-  (swap! context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
-  (swap! context assoc-in [:textures :background]   (engine/load-texture (texture "background.png")))
-  (swap! context assoc-in [:textures :tile-sheet]   (engine/load-texture (texture "tile_sheet.png"))))
+  #_(swap! context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
+  #_(swap! context assoc-in [:textures :background]   (engine/load-texture (texture "background.png")))
+  #_(swap! context assoc-in [:textures :tile-sheet]   (engine/load-texture (texture "tile_sheet.png"))))
