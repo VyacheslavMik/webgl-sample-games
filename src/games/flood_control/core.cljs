@@ -59,6 +59,12 @@
                        (set! (.. text -visible) false)
                        text))
 
+(def water-sprite (js/PIXI.Sprite.
+                   (js/PIXI.Texture.
+                    (js/PIXI.BaseTexture.fromImage
+                     "textures/flood_control/background.png"))))
+(set! (.. water-sprite -alpha) 0.7)
+
 (def board-width  8)
 (def board-height 10)
 
@@ -90,7 +96,7 @@
 (def game-board-display-position-y 89)
 
 (def water-overlay-start {:x 85  :y 245})
-(def water-position      {:x 478 :y 338})
+(def water-position      {:x 478 :y 340})
 (def score-position      {:x 608 :y 245})
 (def level-text-position {:x 514 :y 245})
 
@@ -112,24 +118,89 @@
     (doseq [y (range board-height)]
       (swap! context assoc-in [:board x y] empty-piece))))
 
+(defn locked? [x y]
+  (get-in @context [:board x y :suffixes :l]))
+
+(defn get-source-rect [piece]
+  (js/PIXI.Rectangle. (+ texture-offset-x
+                         (if (get-in piece [:suffixes :w])
+                           (+ piece-width texture-padding-x)
+                           0)
+                         (if (get-in piece [:suffixes :l])
+                           (* 2 (+ piece-width texture-padding-x))
+                           0))
+                      (+ texture-offset-y
+                         (* (piece-types (:piece-type piece))
+                            (+ piece-height texture-padding-y)))
+                      piece-width
+                      piece-height))
+
+(defn sprite [piece-type]
+  (let [texture (js/PIXI.Texture.fromImage "textures/flood_control/tile_sheet.png")
+        rect (get-source-rect {:piece-type piece-type})]
+    (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))))
+
+(defn update-sprite [piece]
+  (let [sprite (:sprite piece)
+        rect (get-source-rect piece)]
+    (set! (.. sprite -texture -orig) rect)
+    (set! (.. sprite -texture -frame) rect)
+    (.. sprite -texture (_updateUvs))))
+
+(defn fill-empty-pieces []
+  (let [texture (js/PIXI.Texture.fromImage "textures/flood_control/tile_sheet.png")]
+    (doseq [x (range board-width)]
+      (doseq [y (range board-height)]
+        (let [px (+ game-board-display-position-x (* x piece-width))
+              py (+ game-board-display-position-y (* y piece-height))
+              rect (get-source-rect {:piece-type :empty})
+              sprite (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))]
+          (.. sprite -position (set px py))
+          (.. board (addChild sprite)))))))
+
 (defn add-falling-piece [x y v-offset]
   (let [piece (get-in @context [:board x y])
         suffix (get-in piece [:suffixes :l])
-        piece-type (:piece-type piece)]
+        piece-type (:piece-type piece)
+        sprite (sprite piece-type)]
+    (.. board (addChild sprite))
     (swap! context assoc-in [:falling-pieces {:x x :y y}]
            {:piece-type piece-type
             :v-offset v-offset
+            :sprite sprite
             :suffixes (cond-> #{} suffix (conj suffix))})))
+
+(defn add-rotating-piece [x y clockwise?]
+  (when-not (locked? x y)
+    (let [piece (get-in @context [:board x y])
+          suffix (get-in piece [:suffixes :l])
+          piece-type (:piece-type piece)]
+      (swap! context assoc-in [:rotating-pieces {:x x :y y}]
+             {:piece-type piece-type
+              :clockwise? clockwise?
+              :rotation-ticks-remaining 10
+              :rotation-amount 0
+              :suffixes (cond-> #{} suffix (conj suffix))}))))
+
+(defn add-fading-piece [x y]
+  (let [piece (get-in @context [:board x y])
+        suffix (get-in piece [:suffixes :l])
+        piece-type (:piece-type piece)]
+    (swap! context assoc-in [:fading-pieces {:x x :y y}]
+           {:piece-type piece-type
+            :alpha-level 1.0
+            :suffixes (cond-> #{:w} suffix (conj suffix))})))
 
 (defn random-piece [x y]
   (let [types [:left-right :top-bottom :left-top :top-right :right-bottom :bottom-left]
         piece-type (get types (rand-int (count types)))
-        suffix (when (< (rand) 0.1) :l)]
+        suffix (when (< (rand) 0.1) :l)
+        sprite (sprite piece-type)]
+    (.. board (addChild sprite))
+    (set! (.. sprite -visible) false)
     (swap! context assoc-in [:board x y] {:piece-type piece-type
+                                          :sprite sprite
                                           :suffixes (cond-> #{} suffix (conj suffix))})))
-
-(defn locked? [x y]
-  (get-in @context [:board x y :suffixes :l]))
 
 (defn fill-from-above [x y]
   (loop [row-lookup (dec y)]
@@ -167,20 +238,6 @@
 (defn draw-background [textures]
   #_(engine/draw-rectangle
    {:texture (:background textures)}))
-
-(defn get-source-rect [piece]
-  {:x (+ texture-offset-x
-         (if (get-in piece [:suffixes :w])
-           (+ piece-width texture-padding-x)
-           0)
-         (if (get-in piece [:suffixes :l])
-           (* 2 (+ piece-width texture-padding-x))
-           0))
-   :y (+ texture-offset-y
-         (* (piece-types (:piece-type piece))
-            (+ piece-height texture-padding-y)))
-   :w piece-width
-   :h piece-height})
 
 (defn draw-board [{:keys [textures board falling-pieces rotating-pieces fading-pieces]}]
   (doseq [x (range board-width)]
@@ -221,6 +278,43 @@
              {:texture (:tile-sheet textures)
               :position {:x px :y py}
               :tex-coords (get-source-rect (get-in board [x y]))})))))))
+
+(defn update-board [{:keys [textures board falling-pieces rotating-pieces fading-pieces]}]
+  (doseq [x (range board-width)]
+    (doseq [y (range board-height)]
+      (let [px (+ game-board-display-position-x (* x piece-width))
+            py (+ game-board-display-position-y (* y piece-height))]
+        #_(engine/draw-rectangle
+         {:texture (:tile-sheet textures)
+          :position {:x px :y py}
+          :tex-coords (get-source-rect {:piece-type :empty})})
+        (let [drawn? false #_(when-let [piece (get fading-pieces {:x x :y y})]
+                         (engine/draw-rectangle
+                          {:texture (:tile-sheet textures)
+                           :position {:x px :y py}
+                           :color (engine/color [1.0 1.0 1.0 (:alpha-level piece)])
+                           :tex-coords (get-source-rect piece)})
+                         true)
+              drawn? (or (when-let [piece (get falling-pieces {:x x :y y})]
+                           (.. (:sprite piece) -position (set px (- py (:v-offset piece))))
+                           true)
+                         drawn?)
+              #_drawn? #_false #_(or (when-let [piece (get rotating-pieces {:x x :y y})]
+                                   (engine/draw-rectangle
+                                    {:texture (:tile-sheet textures)
+                                     :position {:x px :y py}
+                                     :effect {:type :rotate
+                                              :angle (if (:clockwise? piece)
+                                                       (:rotation-amount piece)
+                                                       (- 360 (:rotation-amount piece)))}
+                                     :tex-coords (get-source-rect piece)})
+                                   true)
+                                     drawn?)]
+          (let [piece (get-in board [x y])]
+            (set! (.. (:sprite piece) -visible) (not drawn?))
+            (when-not drawn?
+              (update-sprite piece)
+              (.. (:sprite piece) -position (set px py)))))))))
 
 (defn draw* []
   (let [{:keys [textures state board] :as ctx} @context]
@@ -335,6 +429,7 @@
   (doseq [k (keys (:falling-pieces @context))]
     (update-falling-piece k delta)
     (when (= (get-in @context [:falling-pieces k :v-offset]) 0)
+      (.. (get-in @context [:falling-pieces k :sprite]) destroy)
       (swap! context update :falling-pieces dissoc k))))
 
 (defn update-rotating-piece [k delta]
@@ -375,27 +470,6 @@
        (filterv (fn [score-zoom]
                   (not (> (:display-counter score-zoom) (:max-display-count score-zoom)))))))
 
-(defn add-rotating-piece [x y clockwise?]
-  (when-not (locked? x y)
-    (let [piece (get-in @context [:board x y])
-          suffix (get-in piece [:suffixes :l])
-          piece-type (:piece-type piece)]
-      (swap! context assoc-in [:rotating-pieces {:x x :y y}]
-             {:piece-type piece-type
-              :clockwise? clockwise?
-              :rotation-ticks-remaining 10
-              :rotation-amount 0
-              :suffixes (cond-> #{} suffix (conj suffix))}))))
-
-(defn add-fading-piece [x y]
-  (let [piece (get-in @context [:board x y])
-        suffix (get-in piece [:suffixes :l])
-        piece-type (:piece-type piece)]
-    (swap! context assoc-in [:fading-pieces {:x x :y y}]
-           {:piece-type piece-type
-            :alpha-level 1.0
-            :suffixes (cond-> #{:w} suffix (conj suffix))})))
-
 (defn rotate-piece [x y clockwise?]
   (when-not (locked? x y)
     (let [piece-type (get-in @context [:board x y :piece-type])
@@ -421,7 +495,7 @@
       (swap! context assoc-in [:board x y :piece-type] piece-type))))
 
 (defn handle-mouse-input []
-  #_(when-let [mouse-state (engine/get-mouse-state)]
+  (when-let [mouse-state (controls/get-mouse-state)]
     (let [x (Math/floor (/ (- (:x mouse-state) game-board-display-position-x) piece-width))
           y (Math/floor (/ (- (:y mouse-state) game-board-display-position-y) piece-height))]
       (when (and (>= x 0) (< x board-width)
@@ -441,7 +515,7 @@
         (swap! context assoc :time-since-last-input 0)))))
 
 (defn handle-touch-input []
-  #_(when-let [touch-state (engine/get-touch-state)]
+  (when-let [touch-state (controls/get-touch-state)]
     (let [x (Math/floor (/ (- (:x touch-state) game-board-display-position-x) piece-width))
           y (Math/floor (/ (- (:y touch-state) game-board-display-position-y) piece-height))]
       (when (and (>= x 0) (< x board-width)
@@ -454,7 +528,7 @@
   (min max-v (max v min-v)))
 
 (defn update* [delta]
-  (let [{:keys [state]} @context]
+  (let [{:keys [state] :as ctx} @context]
     (case state
       :title-screen
       (when (or (controls/key-pressed? :Space) (controls/get-touch-state))
@@ -462,7 +536,6 @@
         (set! (.. board -visible) true)
         (new-board)
         (clear-board)
-        (generate-new-pieces false)
         (swap! context assoc :player-score 0)
         (swap! context assoc :current-level 0)
         (swap! context assoc :flood-increase-amount 0)
@@ -532,7 +605,26 @@
           (set! (.. board -visible) false)
           (set! (.. paused-text -visible) true)
           (swap! context assoc :time-since-last-input 0)
-          (swap! context assoc :state :paused)))
+          (swap! context assoc :state :paused))
+
+        (let [water-height (* max-water-height (/ (:flood-count ctx) 100))]
+          (set! (.. water-sprite -texture -orig)
+                (js/PIXI.Rectangle.
+                 (:x water-overlay-start)
+                 (+ (:y water-overlay-start) (- max-water-height water-height))
+                 water-width
+                 water-height))
+          (set! (.. water-sprite -texture -frame)
+                (js/PIXI.Rectangle.
+                 (:x water-overlay-start)
+                 (+ (:y water-overlay-start) (- max-water-height water-height))
+                 water-width
+                 water-height))
+          (.. water-sprite -position (set (:x water-position)
+                                          (+ (:y water-position) (- max-water-height water-height))))
+          (.. water-sprite -texture (_updateUvs)))
+
+        (update-board @context))
 
       :game-over
       (do
@@ -565,11 +657,12 @@
     (set! (.. board -visible) false)
 
     (.. board (addChild background))
+    (.. board (addChild water-sprite))
     (game/run (pixi/init
                ["textures/flood_control/title_screen.png"
                 "textures/flood_control/background.png"
                 "textures/flood_control/tile_sheet.png"]
-               #()) update* root)
+               #(fill-empty-pieces)) update* root)
     (swap! context assoc :initialized? true))
   #_(engine/init {:draw-fn   draw*
                 :update-fn update*
