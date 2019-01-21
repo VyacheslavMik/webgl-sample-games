@@ -17,47 +17,46 @@
                     :rotating-pieces {}
                     :fading-pieces {}}))
 
-(defonce root (let [container (js/PIXI.Container.)]
-                (set! (.. container -width) 800)
-                (set! (.. container -height) 600)
-                container))
+(defn fullscreen-sprite [image]
+  (let [sprite (js/PIXI.Sprite.
+                (js/PIXI.Texture.fromImage image))]
+    (set! (.. sprite -width) 800)
+    (set! (.. sprite -height) 600)
+    sprite))
 
-(defonce board (let [container (js/PIXI.Container.)]
-                 (set! (.. container -width) 800)
-                 (set! (.. container -height) 600)
-                 container))
+(defn fullscreen-container []
+  (let [container (js/PIXI.Container.)]
+    (set! (.. container -width) 800)
+    (set! (.. container -height) 600)
+    container))
+  
 
-(defonce title-screen (let [sprite (js/PIXI.Sprite.
-                                    (js/PIXI.Texture.fromImage
-                                     "textures/flood_control/title_screen.png"))]
-                        (set! (.. sprite -width) 800)
-                        (set! (.. sprite -height) 600)
-                        sprite))
+(defonce root  (fullscreen-container))
+(defonce board (fullscreen-container))
 
-(defonce background (let [sprite (js/PIXI.Sprite.
-                                  (js/PIXI.Texture.fromImage
-                                   "textures/flood_control/background.png"))]
-                      (set! (.. sprite -width) 800)
-                      (set! (.. sprite -height) 600)
-                      sprite))
+(defonce title-screen (fullscreen-sprite "textures/flood_control/title_screen.png"))
+(defonce background   (fullscreen-sprite "textures/flood_control/background.png"))
 
-(defonce game-over-text (let [text (js/PIXI.Text. "G A M E  O V E R !"
-                                                  #js{:fontFamily "Arial"
-                                                      :fontSize 48
-                                                      :fill "white"})]
-                          (.. text -position (set 400 300))
-                          (.. text -anchor (set 0.5))
-                          (set! (.. text -visible) false)
-                          text))
+(defn text [val {:keys [x y]} size visible? & [tint alpha scale add?]]
+  (let [text (js/PIXI.Text. val
+                            #js{:fontFamily "Arial"
+                                :fontSize size
+                                :fill "white"})]
+    (.. text -position (set x y))
+    (.. text -anchor (set 0.5))
+    (set! (.. text -visible) visible?)
+    (when tint
+      (set! (.. text -tint) tint))
+    (when alpha
+      (set! (.. text -alpha) alpha))
+    (when scale
+      (.. text -scale (set scale)))
+    (when add?
+      (.. board (addChild text)))
+    text))
 
-(defonce paused-text (let [text (js/PIXI.Text. "P A U S E D"
-                                               #js{:fontFamily "Arial"
-                                                   :fontSize 48
-                                                   :fill "white"})]
-                       (.. text -position (set 400 300))
-                       (.. text -anchor (set 0.5))
-                       (set! (.. text -visible) false)
-                       text))
+(defonce game-over-text (text "G A M E  O V E R !" {:x 400 :y 300} 48 false))
+(defonce paused-text    (text "P A U S E D" {:x 400 :y 300} 48 false))
 
 (def water-sprite (js/PIXI.Sprite.
                    (js/PIXI.Texture.
@@ -156,18 +155,21 @@
               rect (get-source-rect {:piece-type :empty})
               empty-sprite (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))
               sprite       (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))]
+          (set! (.. sprite -visible) false)
           (.. board (addChild empty-sprite))
           (.. board (addChild sprite))
           (.. empty-sprite -position (set px py))
           (.. sprite       -position (set px py))
-          (set! (.. sprite -visible) false)
           (swap! context assoc-in [:board x y :sprite] sprite))))))
 
 (defn add-falling-piece [x y v-offset]
   (let [piece (get-in @context [:board x y])
         suffix (get-in piece [:suffixes :l])
         piece-type (:piece-type piece)
-        sprite (sprite piece-type)]
+        sprite (sprite piece-type)
+        px (+ game-board-display-position-x (* x piece-width))
+        py (+ game-board-display-position-y (* y piece-height))]
+    (.. sprite -position (set px (- py v-offset)))
     (.. board (addChild sprite))
     (swap! context assoc-in [:falling-pieces {:x x :y y}]
            {:piece-type piece-type
@@ -197,17 +199,22 @@
 (defn add-fading-piece [x y]
   (let [piece (get-in @context [:board x y])
         suffix (get-in piece [:suffixes :l])
-        piece-type (:piece-type piece)]
+        piece-type (:piece-type piece)
+        sprite (sprite piece-type)
+        px (+ game-board-display-position-x (* x piece-width))
+        py (+ game-board-display-position-y (* y piece-height))]
+    (.. board (addChild sprite))
+    (.. sprite -position (set px py))
     (swap! context assoc-in [:fading-pieces {:x x :y y}]
            {:piece-type piece-type
             :alpha-level 1.0
+            :sprite sprite
             :suffixes (cond-> #{:w} suffix (conj suffix))})))
 
 (defn random-piece [x y]
   (let [types [:left-right :top-bottom :left-top :top-right :right-bottom :bottom-left]
         piece-type (get types (rand-int (count types)))
         suffix (when (< (rand) 0.1) :l)]
-    (println (get-in @context [:board x y]))
     (swap! context update-in [:board x y] merge
            {:piece-type piece-type
             :suffixes (cond-> #{} suffix (conj suffix))})))
@@ -294,17 +301,9 @@
     (doseq [y (range board-height)]
       (let [px (+ game-board-display-position-x (* x piece-width))
             py (+ game-board-display-position-y (* y piece-height))]
-        #_(engine/draw-rectangle
-           {:texture (:tile-sheet textures)
-            :position {:x px :y py}
-            :tex-coords (get-source-rect {:piece-type :empty})})
-        (let [drawn? false #_(when-let [piece (get fading-pieces {:x x :y y})]
-                               (engine/draw-rectangle
-                                {:texture (:tile-sheet textures)
-                                 :position {:x px :y py}
-                                 :color (engine/color [1.0 1.0 1.0 (:alpha-level piece)])
-                                 :tex-coords (get-source-rect piece)})
-                               true)
+        (let [drawn? (when-let [piece (get fading-pieces {:x x :y y})]
+                       (set! (.. (:sprite piece) -alpha) (:alpha-level piece))
+                       true)
               drawn? (or (when-let [piece (get falling-pieces {:x x :y y})]
                            (.. (:sprite piece) -position (set px (- py (:v-offset piece))))
                            true)
@@ -457,6 +456,7 @@
   (doseq [k (keys (:fading-pieces @context))]
     (update-fading-piece k)
     (when (= (get-in @context [:fading-pieces k :alpha-level]) 0)
+      (.. (get-in @context [:fading-pieces k :sprite]) destroy)
       (swap! context update :fading-pieces dissoc k))))
 
 (defn update-animated-pieces [delta]
@@ -469,11 +469,14 @@
 (defn update-score-zooms [score-zooms]
   (->> score-zooms
        (mapv (fn [score-zoom]
+               (.. (:sprite score-zoom) -scale (set (:scale score-zoom)))
                (-> score-zoom
                    (update :scale + (:last-scale-amount score-zoom) (:scale-amount score-zoom))
                    (update :last-scale-amount + (:scale-amount score-zoom))
                    (update :display-counter inc))))
        (filterv (fn [score-zoom]
+                  (when (> (:display-counter score-zoom) (:max-display-count score-zoom))
+                    (.. (:sprite score-zoom) destroy))
                   (not (> (:display-counter score-zoom) (:max-display-count score-zoom)))))))
 
 (defn rotate-piece [x y clockwise?]
@@ -539,7 +542,7 @@
       :title-screen
       (when (or (controls/key-pressed? :Space) (controls/get-touch-state))
         (set! (.. title-screen -visible) false)
-        (set! (.. board -visible) true)
+        (set! (.. board -visible)        true)
         (clear-board)
         (swap! context assoc :player-score 0)
         (swap! context assoc :current-level 0)
@@ -556,6 +559,7 @@
           (swap! context update :flood-count + (:flood-increase-amount @context))
           (swap! context assoc :time-since-last-flood-increase 0)
           (when (>= (:flood-count @context) max-flood-counter)
+            (set! (.. game-over-text -visible) true)
             (swap! context assoc :game-over-timer 8)
             (swap! context assoc :state :game-over)))
         
@@ -585,8 +589,15 @@
                                                                :display-counter 0
                                                                :scale 0.4
                                                                :last-scale-amount 0.0
-                                                               :scale-amount 0.4
-                                                               #_:color #_(engine/color [1.0 0.0 0.0 0.4])})
+                                                               :scale-amount 0.1
+                                                               :sprite (text (str "+" score)
+                                                                             {:x 400 :y 300}
+                                                                             16
+                                                                             true
+                                                                             0xFF0000
+                                                                             0.4
+                                                                             0.4
+                                                                             true)})
 
                       (doseq [scoring-square chain]
                         (let [x (:x scoring-square)
@@ -635,6 +646,9 @@
       (do
         (swap! context update :game-over-timer - (* delta 0.001))
         (when (<= (:game-over-timer @context) 0)
+          (set! (.. game-over-text -visible) false)
+          (set! (.. title-screen   -visible) true)
+          (set! (.. board          -visible) false)
           (swap! context assoc :state :title-screen)))
 
       :paused
