@@ -116,7 +116,7 @@
 (defn clear-board []
   (doseq [x (range board-width)]
     (doseq [y (range board-height)]
-      (swap! context assoc-in [:board x y] empty-piece))))
+      (swap! context update-in [:board x y] merge empty-piece))))
 
 (defn locked? [x y]
   (get-in @context [:board x y :suffixes :l]))
@@ -154,9 +154,14 @@
         (let [px (+ game-board-display-position-x (* x piece-width))
               py (+ game-board-display-position-y (* y piece-height))
               rect (get-source-rect {:piece-type :empty})
-              sprite (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))]
-          (.. sprite -position (set px py))
-          (.. board (addChild sprite)))))))
+              empty-sprite (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))
+              sprite       (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))]
+          (.. board (addChild empty-sprite))
+          (.. board (addChild sprite))
+          (.. empty-sprite -position (set px py))
+          (.. sprite       -position (set px py))
+          (set! (.. sprite -visible) false)
+          (swap! context assoc-in [:board x y :sprite] sprite))))))
 
 (defn add-falling-piece [x y v-offset]
   (let [piece (get-in @context [:board x y])
@@ -174,12 +179,19 @@
   (when-not (locked? x y)
     (let [piece (get-in @context [:board x y])
           suffix (get-in piece [:suffixes :l])
-          piece-type (:piece-type piece)]
+          piece-type (:piece-type piece)
+          sprite (sprite piece-type)
+          px (+ game-board-display-position-x (* x piece-width) (/ piece-width 2))
+          py (+ game-board-display-position-y (* y piece-height) (/ piece-height 2))]
+      (.. board (addChild sprite))
+      (.. sprite -anchor (set 0.5))
+      (.. sprite -position (set px py))
       (swap! context assoc-in [:rotating-pieces {:x x :y y}]
              {:piece-type piece-type
               :clockwise? clockwise?
               :rotation-ticks-remaining 10
               :rotation-amount 0
+              :sprite sprite
               :suffixes (cond-> #{} suffix (conj suffix))}))))
 
 (defn add-fading-piece [x y]
@@ -194,13 +206,11 @@
 (defn random-piece [x y]
   (let [types [:left-right :top-bottom :left-top :top-right :right-bottom :bottom-left]
         piece-type (get types (rand-int (count types)))
-        suffix (when (< (rand) 0.1) :l)
-        sprite (sprite piece-type)]
-    (.. board (addChild sprite))
-    (set! (.. sprite -visible) false)
-    (swap! context assoc-in [:board x y] {:piece-type piece-type
-                                          :sprite sprite
-                                          :suffixes (cond-> #{} suffix (conj suffix))})))
+        suffix (when (< (rand) 0.1) :l)]
+    (println (get-in @context [:board x y]))
+    (swap! context update-in [:board x y] merge
+           {:piece-type piece-type
+            :suffixes (cond-> #{} suffix (conj suffix))})))
 
 (defn fill-from-above [x y]
   (loop [row-lookup (dec y)]
@@ -285,36 +295,31 @@
       (let [px (+ game-board-display-position-x (* x piece-width))
             py (+ game-board-display-position-y (* y piece-height))]
         #_(engine/draw-rectangle
-         {:texture (:tile-sheet textures)
-          :position {:x px :y py}
-          :tex-coords (get-source-rect {:piece-type :empty})})
+           {:texture (:tile-sheet textures)
+            :position {:x px :y py}
+            :tex-coords (get-source-rect {:piece-type :empty})})
         (let [drawn? false #_(when-let [piece (get fading-pieces {:x x :y y})]
-                         (engine/draw-rectangle
-                          {:texture (:tile-sheet textures)
-                           :position {:x px :y py}
-                           :color (engine/color [1.0 1.0 1.0 (:alpha-level piece)])
-                           :tex-coords (get-source-rect piece)})
-                         true)
+                               (engine/draw-rectangle
+                                {:texture (:tile-sheet textures)
+                                 :position {:x px :y py}
+                                 :color (engine/color [1.0 1.0 1.0 (:alpha-level piece)])
+                                 :tex-coords (get-source-rect piece)})
+                               true)
               drawn? (or (when-let [piece (get falling-pieces {:x x :y y})]
                            (.. (:sprite piece) -position (set px (- py (:v-offset piece))))
                            true)
                          drawn?)
-              #_drawn? #_false #_(or (when-let [piece (get rotating-pieces {:x x :y y})]
-                                   (engine/draw-rectangle
-                                    {:texture (:tile-sheet textures)
-                                     :position {:x px :y py}
-                                     :effect {:type :rotate
-                                              :angle (if (:clockwise? piece)
-                                                       (:rotation-amount piece)
-                                                       (- 360 (:rotation-amount piece)))}
-                                     :tex-coords (get-source-rect piece)})
-                                   true)
-                                     drawn?)]
+              drawn? (or (when-let [piece (get rotating-pieces {:x x :y y})]
+                           (set! (.. (:sprite piece) -rotation)
+                                 (if (:clockwise? piece)
+                                   (/ (* (:rotation-amount piece) Math/PI) 180)
+                                   (/ (* (- 360 (:rotation-amount piece)) Math/PI) 180)))
+                           true)
+                         drawn?)]
           (let [piece (get-in board [x y])]
             (set! (.. (:sprite piece) -visible) (not drawn?))
             (when-not drawn?
-              (update-sprite piece)
-              (.. (:sprite piece) -position (set px py)))))))))
+              (update-sprite piece))))))))
 
 (defn draw* []
   (let [{:keys [textures state board] :as ctx} @context]
@@ -441,6 +446,7 @@
   (doseq [k (keys (:rotating-pieces @context))]
     (update-rotating-piece k delta)
     (when (= (get-in @context [:rotating-pieces k :rotation-ticks-remaining]) 0)
+      (.. (get-in @context [:rotating-pieces k :sprite]) destroy)
       (swap! context update :rotating-pieces dissoc k))))
 
 (defn update-fading-piece [k]
@@ -534,7 +540,6 @@
       (when (or (controls/key-pressed? :Space) (controls/get-touch-state))
         (set! (.. title-screen -visible) false)
         (set! (.. board -visible) true)
-        (new-board)
         (clear-board)
         (swap! context assoc :player-score 0)
         (swap! context assoc :current-level 0)
@@ -662,7 +667,9 @@
                ["textures/flood_control/title_screen.png"
                 "textures/flood_control/background.png"
                 "textures/flood_control/tile_sheet.png"]
-               #(fill-empty-pieces)) update* root)
+               #(do
+                  (new-board)
+                  (fill-empty-pieces))) update* root)
     (swap! context assoc :initialized? true))
   #_(engine/init {:draw-fn   draw*
                 :update-fn update*
