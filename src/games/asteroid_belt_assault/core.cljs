@@ -106,10 +106,13 @@
     (< (+ x1 w1) x2) (< (+ x2 w2) x1)
     (< (+ y1 h1) y2) (< (+ y2 h2) y1))))
 
+(defn make-hex [n1 n2 n3]
+  (+ n3 (* n2 256) (* n1 65536)))
+
 (defn star-color []
   (->> (get star-colors (rand-int (count star-colors)))
        (mapv (partial * (/ (+ (rand-int 50) 50) 100)))
-       #_(engine/rgb-color)))
+       (apply make-hex)))
 
 (def sprite {:location {:x 0 :y 0}
              :texture nil
@@ -120,23 +123,52 @@
              :current-frame 0
              :frame-time 0.1
              :time-for-current-frame 0
-             :tint-color nil #_engine/color-white
+             :tint-color 0xFFFFFF
              :collision-radius 0})
 
+(defn pixi-sprite [frame-rect]
+  (let [texture (js/PIXI.Texture.fromImage (texture "sprite_sheet.png"))
+        rect (js/PIXI.Rectangle. (:x frame-rect)
+                                 (:y frame-rect)
+                                 (:w frame-rect)
+                                 (:h frame-rect))
+        pixi-sprite (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))]
+    (.. game-screen (addChild pixi-sprite))
+    pixi-sprite))
+
+(defn update-pixi-sprite [sprite]
+  (when-let [pixi-sprite (:sprite sprite)]
+    (let [{:keys [x y]} (:location sprite)
+          tex-coords (get-in sprite [:frames (:current-frame sprite)])
+          rect (when (or (not= (:x tex-coords) (.. pixi-sprite -texture -frame -x))
+                         (not= (:y tex-coords) (.. pixi-sprite -texture -frame -y))
+                         (not= (:w tex-coords) (.. pixi-sprite -texture -frame -width))
+                         (not= (:h tex-coords) (.. pixi-sprite -texture -frame -height)))
+                 (js/PIXI.Rectangle. (:x tex-coords)
+                                     (:y tex-coords)
+                                     (:w tex-coords)
+                                     (:h tex-coords)))]
+      (when rect
+        (set! (.. pixi-sprite -texture -orig) rect)
+        (set! (.. pixi-sprite -texture -frame) rect)
+        (.. pixi-sprite -texture (_updateUvs)))
+      (set! pixi-sprite -tint (:tint-color sprite))
+      (.. pixi-sprite -position (set x y)))))
+
 (defn make-star-field [star-count frame-rect star-velocity]
-  (let [texture (get-in @context [:textures :sprite-sheet])]
-    (swap! context assoc :stars
-           (mapv (fn [_]
+  (swap! context assoc :stars
+         (mapv (fn [_]
+                 (let [pixi-sprite (pixi-sprite frame-rect)]
                    (assoc sprite
                           :location {:x (rand-int screen-width)
                                      :y (rand-int screen-height)}
-                          :texture texture
+                          :sprite pixi-sprite
                           :frames [frame-rect]
                           :frame-width (:w frame-rect)
                           :frame-height (:h frame-rect)
                           :velocity star-velocity
-                          :tint-color (star-color)))
-                 (range star-count)))))
+                          :tint-color (star-color))))
+               (range star-count))))
 
 (defn make-asteroids [asteroid-count frame-rect asteroid-frames]
   (let [texture (get-in @context [:textures :sprite-sheet])
@@ -258,6 +290,7 @@
                    (update :time-for-current-frame + elapsed)
                    (update-in [:location :x] + (* (-> sprite :velocity :x) elapsed))
                    (update-in [:location :y] + (* (-> sprite :velocity :y) elapsed)))]
+    (update-pixi-sprite sprite)
     (if (>= (:time-for-current-frame sprite) (:frame-time sprite))
       (-> sprite
           (assoc :current-frame (mod (inc (:current-frame sprite)) (count (:frames sprite))))
