@@ -37,13 +37,14 @@
 (defonce title-screen (fullscreen-sprite "textures/flood_control/title_screen.png"))
 (defonce background   (fullscreen-sprite "textures/flood_control/background.png"))
 
-(defn text [val {:keys [x y]} size visible? & [tint alpha scale add?]]
+(defn text [val {:keys [x y]} size visible? & [tint alpha scale add? no-anchor?]]
   (let [text (js/PIXI.Text. val
                             #js{:fontFamily "Arial"
                                 :fontSize size
                                 :fill "white"})]
     (.. text -position (set x y))
-    (.. text -anchor (set 0.5))
+    (when-not no-anchor?
+      (.. text -anchor (set 0.5)))
     (set! (.. text -visible) visible?)
     (when tint
       (set! (.. text -tint) tint))
@@ -55,8 +56,15 @@
       (.. board (addChild text)))
     text))
 
-(defonce game-over-text (text "G A M E  O V E R !" {:x 400 :y 300} 48 false))
-(defonce paused-text    (text "P A U S E D" {:x 400 :y 300} 48 false))
+(def water-overlay-start {:x 85  :y 245})
+(def water-position      {:x 478 :y 340})
+(def score-position      {:x 608 :y 225})
+(def level-text-position {:x 514 :y 225})
+
+(defonce game-over-text    (text "G A M E  O V E R !" {:x 400 :y 300} 48 false))
+(defonce paused-text       (text "P A U S E D" {:x 400 :y 300} 48 false))
+(defonce player-score-text (text "0" score-position      36 true 0x000000 1.0 1.0 false true))
+(defonce level-text        (text "0" level-text-position 36 true 0x000000 1.0 1.0 false true))
 
 (def water-sprite (js/PIXI.Sprite.
                    (js/PIXI.Texture.
@@ -93,11 +101,6 @@
                   :empty        6})
 (def game-board-display-position-x 70)
 (def game-board-display-position-y 89)
-
-(def water-overlay-start {:x 85  :y 245})
-(def water-position      {:x 478 :y 340})
-(def score-position      {:x 608 :y 245})
-(def level-text-position {:x 514 :y 245})
 
 (def time-between-flood-increase 1)
 
@@ -252,50 +255,6 @@
   (clear-board)
   (generate-new-pieces false))
 
-(defn draw-background [textures]
-  #_(engine/draw-rectangle
-   {:texture (:background textures)}))
-
-(defn draw-board [{:keys [textures board falling-pieces rotating-pieces fading-pieces]}]
-  (doseq [x (range board-width)]
-    (doseq [y (range board-height)]
-      (let [px (+ game-board-display-position-x (* x piece-width))
-            py (+ game-board-display-position-y (* y piece-height))]
-        #_(engine/draw-rectangle
-         {:texture (:tile-sheet textures)
-          :position {:x px :y py}
-          :tex-coords (get-source-rect {:piece-type :empty})})
-        #_(let [drawn? (when-let [piece (get fading-pieces {:x x :y y})]
-                       (engine/draw-rectangle
-                        {:texture (:tile-sheet textures)
-                         :position {:x px :y py}
-                         :color (engine/color [1.0 1.0 1.0 (:alpha-level piece)])
-                         :tex-coords (get-source-rect piece)})
-                       true)
-              drawn? (or (when-let [piece (get falling-pieces {:x x :y y})]
-                           (engine/draw-rectangle
-                            {:texture (:tile-sheet textures)
-                             :position {:x px :y (- py (:v-offset piece))}
-                             :tex-coords (get-source-rect piece)})
-                           true)
-                         drawn?)
-              drawn? (or (when-let [piece (get rotating-pieces {:x x :y y})]
-                           (engine/draw-rectangle
-                            {:texture (:tile-sheet textures)
-                             :position {:x px :y py}
-                             :effect {:type :rotate
-                                      :angle (if (:clockwise? piece)
-                                               (:rotation-amount piece)
-                                               (- 360 (:rotation-amount piece)))}
-                             :tex-coords (get-source-rect piece)})
-                           true)
-                         drawn?)]
-          (when-not drawn?
-            (engine/draw-rectangle
-             {:texture (:tile-sheet textures)
-              :position {:x px :y py}
-              :tex-coords (get-source-rect (get-in board [x y]))})))))))
-
 (defn update-board [{:keys [textures board falling-pieces rotating-pieces fading-pieces]}]
   (doseq [x (range board-width)]
     (doseq [y (range board-height)]
@@ -319,65 +278,6 @@
             (set! (.. (:sprite piece) -visible) (not drawn?))
             (when-not drawn?
               (update-sprite piece))))))))
-
-(defn draw* []
-  (let [{:keys [textures state board] :as ctx} @context]
-    (case state
-      :title-screen
-      (do )
-      #_(engine/draw-rectangle
-       {:texture (:title-screen textures)})
-
-      :playing
-      (do
-        (draw-background textures)
-
-        (let [water-height (* max-water-height (/ (:flood-count ctx) 100))]
-          #_(engine/draw-rectangle
-           {:texture (:background textures)
-            :position {:x (:x water-position)
-                       :y (+ (:y water-position) (- max-water-height water-height))}
-            :tex-coords {:x (:x water-overlay-start)
-                         :y (+ (:y water-overlay-start) (- max-water-height water-height))
-                         :w water-width
-                         :h water-height}
-            :color (engine/rgb-color [255 255 255 180])}))
-
-        (draw-board ctx)
-
-        #_(doseq [score-zoom (:score-zooms ctx)]
-          (engine/draw-text {:position {:x 400 :y 300}
-                             :text (:text score-zoom)
-                             :color (:color score-zoom)
-                             :scale (:scale score-zoom)}))
-
-        #_(engine/draw-text {:text (:player-score ctx)
-                           :font {:size 36}
-                           :align :start
-                           :color (engine/color [0.0 0.0 0.0 1.0])
-                           :position score-position})
-        #_(engine/draw-text {:text (:current-level ctx)
-                           :font {:size 36}
-                           :align :start
-                           :color (engine/color [0.0 0.0 0.0 1.0])
-                           :position level-text-position}))
-
-      :game-over
-      (do
-        (draw-background textures)
-        (draw-board ctx)
-        #_(engine/draw-text {:position {:x 400 :y 300}
-                           :scale 7
-                           :color (engine/color [1.0 0.0 0.0 0.7])
-                           :text "GAME OVER"}))
-      
-      :paused
-      (do )
-      #_(engine/draw-text {:position {:x 400 :y 300}
-                         :scale 7
-                         :text "P A U S E D"})
-
-      nil)))
 
 (defn has-connector? [x y from]
   (str/includes? (name (get-in @context [:board x y :piece-type])) from))
@@ -640,7 +540,10 @@
                                           (+ (:y water-position) (- max-water-height water-height))))
           (.. water-sprite -texture (_updateUvs)))
 
-        (update-board @context))
+        (update-board @context)
+
+        (set! (.. player-score-text -text) (str (:player-score ctx)))
+        (set! (.. level-text        -text) (str (:current-level ctx))))
 
       :game-over
       (do
@@ -663,9 +566,6 @@
 
       nil)))
 
-(defn texture [tex-name]
-  (str "textures/flood_control/" tex-name))
-
 (defn init []
   (when-not (:initialized? @context)
     (.. root (addChild title-screen))
@@ -677,6 +577,8 @@
 
     (.. board (addChild background))
     (.. board (addChild water-sprite))
+    (.. board (addChild player-score-text))
+    (.. board (addChild level-text))
     (game/run (pixi/init
                ["textures/flood_control/title_screen.png"
                 "textures/flood_control/background.png"
@@ -684,11 +586,4 @@
                #(do
                   (new-board)
                   (fill-empty-pieces))) update* root)
-    (swap! context assoc :initialized? true))
-  #_(engine/init {:draw-fn   draw*
-                :update-fn update*
-                :show-fps? true})
-
-  #_(swap! context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
-  #_(swap! context assoc-in [:textures :background]   (engine/load-texture (texture "background.png")))
-  #_(swap! context assoc-in [:textures :tile-sheet]   (engine/load-texture (texture "tile_sheet.png"))))
+    (swap! context assoc :initialized? true)))
