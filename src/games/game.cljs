@@ -6,3 +6,6 @@
   (controls/register-events (.. app -view))
   (.. app -ticker (add (fn [_]
                          (update* (.. app -ticker -elapsedMS))))))
+
+(defn play-sound [url]
+  (.play (js/Audio. url)))

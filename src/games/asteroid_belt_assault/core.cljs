@@ -1,7 +1,40 @@
 (ns games.asteroid-belt-assault.core
-  (:require [games.engine :as engine]))
+  (:require [games.game :as game]
+            [games.controls :as controls]
+            [games.pixi :as pixi]))
 
 (def context (atom {:state :title-screen}))
+
+(defn fullscreen-sprite [image]
+  (let [sprite (js/PIXI.Sprite.
+                (js/PIXI.Texture.fromImage image))]
+    (set! (.. sprite -width) 800)
+    (set! (.. sprite -height) 600)
+    sprite))
+
+(defn fullscreen-container []
+  (let [container (js/PIXI.Container.)]
+    (set! (.. container -width) 800)
+    (set! (.. container -height) 600)
+    container))
+
+(defn texture [tex-name]
+  (str "textures/asteroid_belt_assault/" tex-name))  
+
+(defonce root         (fullscreen-container))
+(defonce game-screen  (fullscreen-container))
+(defonce title-screen (fullscreen-sprite (texture "title_screen.png")))
+
+(defn text [val {:keys [x y]} size visible? & [no-anchor?]]
+  (let [text (js/PIXI.Text. val
+                            #js{:fontFamily "Arial"
+                                :fontSize size
+                                :fill "white"})]
+    (.. text -position (set x y))
+    (when-not no-anchor?
+      (.. text -anchor (set 0.5)))
+    (set! (.. text -visible) visible?)
+    text))
 
 (def title-screen-delay-time 1)
 (def player-starting-lives   3)
@@ -76,7 +109,7 @@
 (defn star-color []
   (->> (get star-colors (rand-int (count star-colors)))
        (mapv (partial * (/ (+ (rand-int 50) 50) 100)))
-       (engine/rgb-color)))
+       #_(engine/rgb-color)))
 
 (def sprite {:location {:x 0 :y 0}
              :texture nil
@@ -87,7 +120,7 @@
              :current-frame 0
              :frame-time 0.1
              :time-for-current-frame 0
-             :tint-color engine/color-white
+             :tint-color nil #_engine/color-white
              :collision-radius 0})
 
 (defn make-star-field [star-count frame-rect star-velocity]
@@ -213,7 +246,7 @@
 (defn draw-sprite [sprite]
   (let [rotation (:rotation sprite)
         tex-coords (get-in sprite [:frames (:current-frame sprite)])]
-    (engine/draw-rectangle (cond-> {:texture (:texture sprite)
+    #_(engine/draw-rectangle (cond-> {:texture (:texture sprite)
                                     :color (:tint-color sprite)
                                     :tex-coords tex-coords
                                     :origin (sprite-center sprite)}
@@ -362,10 +395,10 @@
 
 (defn player-velocity [player]
   (-> (cond-> {:x 0 :y 0}
-        (engine/key-pressed? :KeyW) (vector-add {:x  0 :y -1})
-        (engine/key-pressed? :KeyS) (vector-add {:x  0 :y  1})
-        (engine/key-pressed? :KeyA) (vector-add {:x -1 :y  0})
-        (engine/key-pressed? :KeyD) (vector-add {:x  1 :y  0}))
+        (controls/key-pressed? :KeyW) (vector-add {:x  0 :y -1})
+        (controls/key-pressed? :KeyS) (vector-add {:x  0 :y  1})
+        (controls/key-pressed? :KeyA) (vector-add {:x -1 :y  0})
+        (controls/key-pressed? :KeyD) (vector-add {:x  1 :y  0}))
       (vector-normalize)
       (vector-mul (:speed player))))
 
@@ -392,7 +425,7 @@
       (assoc-in [:location :y] (- (rectangle-bottom area-limit) hh)))))
 
 (defn play-player-shot [url]
-  (engine/play-sound url))
+  (game/play-sound url))
 
 (defn new-shot [location velocity shot-speed]
   (let [texture (get-in @context [:textures :sprite-sheet])
@@ -419,7 +452,7 @@
                                     250))))
 
 (defn enemy-fire-shot [enemy]
-  (engine/play-sound (:enemy-shot-sound @context))
+  (game/play-sound (:enemy-shot-sound @context))
   (let [player-center (sprite-center (get-in @context [:player :sprite]))
         fire-loc (-> enemy :sprite :location
                      (vector-add enemy-gun-offset))
@@ -431,11 +464,12 @@
 (defn update-shots [shots elapsed]
   (->> shots
        (mapv (fn [shot] (update-sprite shot elapsed)))
-       (filterv (fn [shot] (rectangle-intersects?
-                           screen-bounds
-                           (assoc (:location shot)
-                                  :width (:frame-width shot)
-                                  :height (:frame-height shot)))))))
+       (filterv (fn [shot]
+                  (rectangle-intersects?
+                   screen-bounds
+                   (assoc (:location shot)
+                          :width (:frame-width shot)
+                          :height (:frame-height shot)))))))
 
 (defn update-player [delta]
   (let [elapsed (* delta 0.001)]
@@ -445,7 +479,7 @@
                               (assoc :velocity (player-velocity player))
                               (update-sprite elapsed)
                               (impose-movement-limits (:area-limit player)))
-                   fire-shot? (and (engine/key-pressed? :Space)
+                   fire-shot? (and (controls/key-pressed? :Space)
                                    (>= (+ (:shot-timer player) elapsed) min-shot-timer))
                    alive? (not (:destroyed? player))]
                (cond-> player
@@ -494,7 +528,7 @@
 (defn play-explosion []
   (let [sounds (:explosion-sounds @context)
         sound (get sounds (rand-int (count sounds)))]
-    (engine/play-sound sound)))
+    (game/play-sound sound)))
 
 (defn add-explosion [location momentum]
   (let [piece-rectangles (get-in @context [:explosion :piece-rectangles])
@@ -726,7 +760,7 @@
     (draw-enemy enemy)))
 
 (defn draw* []
-  (let [{:keys [textures state player] :as ctx} @context]
+  #_(let [{:keys [textures state player] :as ctx} @context]
     (when (= state :title-screen)
       (engine/draw-rectangle
        {:texture (:title-screen textures)}))
@@ -780,7 +814,9 @@
       (do
         (swap! context update :title-screen-timer + (* delta 0.001))
         (when (and (>= (:title-screen-timer @context) title-screen-delay-time)
-                   (or (engine/key-pressed? :Space) (engine/get-touch-state)))
+                   (or (controls/key-pressed? :Space) (controls/get-touch-state)))
+          (set! (.. title-screen -visible) false)
+          (set! (.. game-screen  -visible) true)
           (swap! context assoc-in [:player :lives-remaining] player-starting-lives)
           (swap! context assoc-in [:player :score] 0)
           (reset-difficult)
@@ -838,19 +874,16 @@
 
       nil)))
 
-(defn texture [tex-name]
-  (str "textures/asteroid_belt_assault/" tex-name))
-
 (defn sound [sound-name]
   (str "sounds/asteroid_belt_assault/" sound-name))
 
 (defn init []
-  (engine/init {:draw-fn   draw*
+  #_(engine/init {:draw-fn   draw*
                 :update-fn update*
                 :show-fps? true})
 
-  (swap! context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
-  (swap! context assoc-in [:textures :sprite-sheet] (engine/load-texture (texture "sprite_sheet.png")))
+  #_(swap! context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
+  #_(swap! context assoc-in [:textures :sprite-sheet] (engine/load-texture (texture "sprite_sheet.png")))
 
   (make-star-field 200 {:x 0 :y 450 :w 2 :h 2} {:x 0 :y 30})
   (make-asteroids 10 {:x 0 :y 0 :w 50 :h 50} 20)
@@ -864,4 +897,17 @@
   (swap! context assoc :difficult-timer 0)
 
   (swap! context assoc-in [:explosion-sounds] (mapv (fn [i] (sound (str "explosion" i ".wav")))
-                                                    (range 1 5))))
+                                                    (range 1 5)))
+
+  
+  (when-not (:initialized? @context)
+    (.. root (addChild title-screen))
+    (.. root (addChild game-screen))
+
+    (set! (.. game-screen -visible) false)
+
+    (game/run (pixi/init
+               [(texture "title_screen.png")
+                (texture "sprite_sheet.png")]
+               #()) update* root)
+    (swap! context assoc :initialized? true)))
