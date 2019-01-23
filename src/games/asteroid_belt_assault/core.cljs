@@ -133,12 +133,17 @@
                                  (:w frame-rect)
                                  (:h frame-rect))
         pixi-sprite (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))]
+    (.. pixi-sprite -anchor (set 0.5))
     (.. game-screen (addChild pixi-sprite))
     pixi-sprite))
 
+(defn sprite-center [sprite]
+  {:x (+ (-> sprite :location :x) (/ (:frame-width sprite) 2))
+   :y (+ (-> sprite :location :y) (/ (:frame-height sprite) 2))})
+
 (defn update-pixi-sprite [sprite]
   (when-let [pixi-sprite (:sprite sprite)]
-    (let [{:keys [x y]} (:location sprite)
+    (let [{:keys [x y]} (sprite-center sprite)
           tex-coords (get-in sprite [:frames (:current-frame sprite)])
           rect (when (or (not= (:x tex-coords) (.. pixi-sprite -texture -frame -x))
                          (not= (:y tex-coords) (.. pixi-sprite -texture -frame -y))
@@ -148,6 +153,10 @@
                                      (:y tex-coords)
                                      (:w tex-coords)
                                      (:h tex-coords)))]
+      (when-let [rotation (:rotation sprite)]
+        (set! (.. pixi-sprite -rotation) rotation))
+      (when-let [alpha (:alpha sprite)]
+        (set! (.. pixi-sprite -alpha) alpha))
       (when rect
         (set! (.. pixi-sprite -texture -orig) rect)
         (set! (.. pixi-sprite -texture -frame) rect)
@@ -158,27 +167,26 @@
 (defn make-star-field [star-count frame-rect star-velocity]
   (swap! context assoc :stars
          (mapv (fn [_]
-                 (let [pixi-sprite (pixi-sprite frame-rect)]
-                   (assoc sprite
-                          :location {:x (rand-int screen-width)
-                                     :y (rand-int screen-height)}
-                          :sprite pixi-sprite
-                          :frames [frame-rect]
-                          :frame-width (:w frame-rect)
-                          :frame-height (:h frame-rect)
-                          :velocity star-velocity
-                          :tint-color (star-color))))
+                 (assoc sprite
+                        :location {:x (rand-int screen-width)
+                                   :y (rand-int screen-height)}
+                        :alpha (* 1 (/ (+ (rand-int 50) 50) 100))
+                        :sprite (pixi-sprite frame-rect)
+                        :frames [frame-rect]
+                        :frame-width (:w frame-rect)
+                        :frame-height (:h frame-rect)
+                        :velocity star-velocity
+                        :tint-color (star-color)))
                (range star-count))))
 
 (defn make-asteroids [asteroid-count frame-rect asteroid-frames]
-  (let [texture (get-in @context [:textures :sprite-sheet])
-        frames (mapv (fn [x] (update frame-rect :x + (* (:w frame-rect) x)))
+  (let [frames (mapv (fn [x] (update frame-rect :x + (* (:w frame-rect) x)))
                      (range 1 asteroid-frames))]
     (swap! context assoc :asteroids
            (mapv (fn [_]
                    (assoc sprite
                           :location {:x -500 :y -500}
-                          :texture texture
+                          :sprite (pixi-sprite frame-rect)
                           :frames (vec (concat [frame-rect] frames))
                           :rotation (rand-int 360)
                           :collision-radius 15
@@ -191,7 +199,7 @@
                      (range 1 frame-count))]
     (swap! context assoc :player {:sprite (assoc sprite
                                                  :location {:x 500 :y 500}
-                                                 :texture texture
+                                                 :sprite (pixi-sprite frame-rect)
                                                  :frames (vec (concat [frame-rect] frames))
                                                  :collision-radius 15)
                                   :shots []
@@ -255,10 +263,6 @@
 
 (defn set-sprite-rotation [sprite v]
   (assoc sprite :rotation (mod v 360)))
-
-(defn sprite-center [sprite]
-  {:x (+ (-> sprite :location :x) (/ (:frame-width sprite) 2))
-   :y (+ (-> sprite :location :y) (/ (:frame-height sprite) 2))})
 
 (defn box-colliding? [sprite rect]
   (rectangle-intersects? {:x (-> sprite :location :x)
@@ -461,13 +465,12 @@
   (game/play-sound url))
 
 (defn new-shot [location velocity shot-speed]
-  (let [texture (get-in @context [:textures :sprite-sheet])
-        frame-rect {:x 0 :y 300 :w 5 :h 5}
+  (let [frame-rect {:x 0 :y 300 :w 5 :h 5}
         frame-count 4
         frames (mapv (fn [x] (update frame-rect :x + (* (:w frame-rect) x)))
                      (range 1 frame-count))]
     (assoc sprite
-           :texture texture
+           :sprite (pixi-sprite frame-rect)
            :location location
            :velocity (vector-mul velocity shot-speed)
            :frames (vec (concat [frame-rect] frames))
@@ -498,11 +501,14 @@
   (->> shots
        (mapv (fn [shot] (update-sprite shot elapsed)))
        (filterv (fn [shot]
-                  (rectangle-intersects?
-                   screen-bounds
-                   (assoc (:location shot)
-                          :width (:frame-width shot)
-                          :height (:frame-height shot)))))))
+                  (let [on-screen? (rectangle-intersects?
+                                    screen-bounds
+                                    (assoc (:location shot)
+                                           :width (:frame-width shot)
+                                           :height (:frame-height shot)))]
+                    (when-not on-screen?
+                      (.. (:sprite shot) destroy))
+                    on-screen?)))))
 
 (defn update-player [delta]
   (let [elapsed (* delta 0.001)]
@@ -515,6 +521,7 @@
                    fire-shot? (and (controls/key-pressed? :Space)
                                    (>= (+ (:shot-timer player) elapsed) min-shot-timer))
                    alive? (not (:destroyed? player))]
+               (set! (.. (:sprite sprite) -visible) alive?)
                (cond-> player
                  alive?                  (update :shot-timer + elapsed)
                  (and fire-shot? alive?) (fire-shot)
@@ -722,7 +729,8 @@
     (swap! context update :enemies conj
            {:sprite (-> sprite
                         (merge enemy-data)
-                        (assoc :frame-width (-> enemy-data :frames first :w)
+                        (assoc :sprite (pixi-sprite (-> enemy-data :frames first))
+                               :frame-width (-> enemy-data :frames first :w)
                                :frame-height (-> enemy-data :frames first :h)))
             :previous-location (first waypoints)
             :speed 120
@@ -766,6 +774,11 @@
         enemy))
     enemy))
 
+(defn destroy-enemy [enemy]
+  (when-not (enemy-active? enemy)
+    (.. (-> enemy :sprite :sprite) destroy))
+  enemy)
+
 (defn update-enemies [delta]
   (let [elapsed (* delta 0.001)
         ship-shot-chance (:ship-shot-chance @context)]
@@ -773,7 +786,7 @@
            (fn [shots] (update-shots shots elapsed)))
     (let [enemies (->> (:enemies @context)
                        (mapv (fn [enemy] (update-enemy enemy elapsed)))
-                       (filterv enemy-active?))]
+                       (filterv (comp enemy-active? destroy-enemy)))]
       (swap! context assoc :enemies enemies)
       (when-not (get-in @context [:player :destroyed?])
         (doseq [enemy enemies]
