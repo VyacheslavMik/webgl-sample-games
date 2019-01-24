@@ -25,6 +25,8 @@
 (defonce game-screen  (fullscreen-container))
 (defonce title-screen (fullscreen-sprite (texture "title_screen.png")))
 
+(defonce particle-container (js/PIXI.particles.ParticleContainer. 1500 #js{:tint true}))
+
 (defn text [val {:keys [x y]} size visible? & [no-anchor?]]
   (let [text (js/PIXI.Text. val
                             #js{:fontFamily "Arial"
@@ -36,12 +38,24 @@
     (set! (.. text -visible) visible?)
     text))
 
+(def score-location {:x 20 :y 10})
+(def lives-location {:x 20 :y 25})
+
+(defonce score-text (text "Score: 0"           score-location 16 true true))
+(defonce lives-text (text "Ships Remaining: 0" lives-location 16 true true))
+
 (def title-screen-delay-time 1)
 (def player-starting-lives   3)
 
 (def screen-width   800)
 (def screen-height  600)
 (def screen-padding 10)
+
+(defonce game-over-text (text "G A M E  O V E R !"
+                              {:x (/ screen-width 2)
+                               :y (/ screen-height 2)}
+                              36
+                              false))
 
 (def star-colors [[255 255 255 255]
                   [255 255 0   255]
@@ -70,8 +84,6 @@
 (def point-speed-max 30)
 
 (def player-start-location {:x 390 :y 550})
-(def score-location {:x 20 :y 10})
-(def lives-location {:x 20 :y 25})
 
 (def min-ships-per-wave 5)
 (def max-ships-per-wave 8)
@@ -85,10 +97,9 @@
   (mapv (fn [c] (* c f)) color))
 
 (def initial-color [1.0 0.3 0.0 1.0])
-(def final-color [0 0 0 0])
+(def final-color   [0 0 0 0])
 
-(def min-shot-timer 0.2)
-
+(def min-shot-timer          0.2)
 (def player-death-delay-time 10)
 
 (defn vector-length [{:keys [x y]}]
@@ -126,7 +137,7 @@
              :tint-color 0xFFFFFF
              :collision-radius 0})
 
-(defn pixi-sprite [frame-rect]
+(defn pixi-sprite [frame-rect & [particle?]]
   (let [texture (js/PIXI.Texture.fromImage (texture "sprite_sheet.png"))
         rect (js/PIXI.Rectangle. (:x frame-rect)
                                  (:y frame-rect)
@@ -134,7 +145,7 @@
                                  (:h frame-rect))
         pixi-sprite (js/PIXI.Sprite. (js/PIXI.Texture. texture rect rect))]
     (.. pixi-sprite -anchor (set 0.5))
-    (.. game-screen (addChild pixi-sprite))
+    (.. (if particle? particle-container game-screen) (addChild pixi-sprite))
     pixi-sprite))
 
 (defn sprite-center [sprite]
@@ -279,16 +290,6 @@
   (let [distance (vector-distance loc1 loc2)]
     (< distance (+ radius other-radius))))
 
-(defn draw-sprite [sprite]
-  (let [rotation (:rotation sprite)
-        tex-coords (get-in sprite [:frames (:current-frame sprite)])]
-    #_(engine/draw-rectangle (cond-> {:texture (:texture sprite)
-                                    :color (:tint-color sprite)
-                                    :tex-coords tex-coords
-                                    :origin (sprite-center sprite)}
-                             (and rotation (not= rotation 0)) (assoc :effect {:type :rotate
-                                                                              :radians rotation})))))
-
 (defn update-sprite [sprite elapsed]
   (let [sprite (-> sprite
                    (update :time-for-current-frame + elapsed)
@@ -301,10 +302,6 @@
           (assoc :time-for-current-frame 0))
       sprite)))
 
-(defn draw-star-field []
-  (doseq [star (:stars @context)]
-    (draw-sprite star)))
-
 (defn update-star-field [delta]
   (let [elapsed (* delta 0.001)]
     (swap! context update :stars
@@ -316,10 +313,6 @@
                     (assoc star :location {:x (rand-int screen-width) :y 0})
                     star)))
               stars)))))
-
-(defn draw-asteroids []
-  (doseq [asteroid (:asteroids @context)]
-    (draw-sprite asteroid)))
 
 (defn asteroid-on-screen? [asteroid]
   (rectangle-intersects? (sprite-center asteroid)
@@ -422,13 +415,6 @@
                                  (sprite-center (get-in @context [:asteroids y]))
                                  (get-in @context [:asteroids y :collision-radius]))
           (bounce-asteroids x y))))))
-
-(defn draw-player []
-  (let [player (:player @context)]
-    (when-not (:destroyed? player)
-      (draw-sprite (:sprite player)))
-    (doseq [shot (:shots player)]
-      (draw-sprite shot))))
 
 (defn player-velocity [player]
   (-> (cond-> {:x 0 :y 0}
@@ -552,7 +538,7 @@
 
 (defn new-particle [location texture frame velocity]
   (assoc sprite
-         :texture texture
+         :sprite (pixi-sprite frame true)
          :location location
          :frames [frame]
          :frame-width (:w frame)
@@ -670,20 +656,15 @@
 (defn particle-active? [particle]
   (> (:remaining-duration particle) 0))
 
-(defn draw-explosions []
-  (doseq [particle (:explosion-particles @context)]
-    (when (particle-active? particle)
-      (draw-sprite particle))))
-
 (defn duration-progress [particle]
   (/ (- (:initial-duration particle) (:remaining-duration particle)) (:initial-duration particle)))
 
 (defn color-lerp [[ar ag ab aa] [br bg bb ba] t]
   (let [t (max 0 (min t 1))]
-    [(+ ar (* (- br ar) t))
-     (+ ag (* (- bg ag) t))
-     (+ ab (* (- bb ab) t))
-     (+ aa (* (- ba aa) t))]))
+    {:tint (js/PIXI.utils.rgb2hex #js[(+ ar (* (- br ar) t))
+                                      (+ ag (* (- bg ag) t))
+                                      (+ ab (* (- bb ab) t))])
+     :alpha (+ aa (* (- ba aa) t))}))
 
 (defn update-particle [particle elapsed]
   (if (particle-active? particle)
@@ -694,21 +675,27 @@
                          (vector-normalize)
                          (vector-mul (:max-speed particle)))
                      velocity)
-          color (color-lerp (:initial-color particle)
-                            (:final-color particle)
-                            (duration-progress particle))]
+          {:keys [tint alpha]} (color-lerp (:initial-color particle)
+                                           (:final-color particle)
+                                           (duration-progress particle))]
       (-> particle
           (assoc :velocity velocity
-                 :tint-color color)
+                 :alpha alpha
+                 :tint-color tint)
           (update :remaining-duration dec)
           (update-sprite elapsed)))
     particle))
+
+(defn ?drop-particle [particle]
+  (when-not (particle-active? particle)
+    (.. (:sprite particle) destroy))
+  particle)
 
 (defn update-explosions [delta]
   (let [elapsed (* delta 0.001)
         explosion-particles (->> (:explosion-particles @context)
                                  (mapv #(update-particle % elapsed))
-                                 (filterv particle-active?))]
+                                 (filterv (comp particle-active? ?drop-particle)))]
     (swap! context assoc :explosion-particles explosion-particles)))
 
 (defn waypoint-reached? [enemy]
@@ -795,42 +782,16 @@
     (when (:enemies-active? @context)
       (update-wave-spawn elapsed))))
 
-(defn draw-enemy [enemy]
-  (when (enemy-active? enemy)
-    (draw-sprite (:sprite enemy))))
-
-(defn draw-enemies []
-  (doseq [shot (:enemy-shots @context)]
-    (draw-sprite shot))
+(defn clear-sprites []
   (doseq [enemy (:enemies @context)]
-    (draw-enemy enemy)))
-
-(defn draw* []
-  #_(let [{:keys [textures state player] :as ctx} @context]
-    (when (= state :title-screen)
-      (engine/draw-rectangle
-       {:texture (:title-screen textures)}))
-
-    (when (#{:playing :player-dead :game-over} state)
-      (draw-star-field)
-      (draw-asteroids)
-      (draw-player)
-      (draw-enemies)
-      (draw-explosions)
-
-      (engine/draw-text {:align :start
-                         :text (str "Score: " (:score player))
-                         :position score-location})
-      (when (>= (:lives-remaining player) 0)
-        (engine/draw-text {:align :start
-                           :text (str "Ships Remaining: " (:lives-remaining player))
-                           :position lives-location})))
-
-    (when (= state :game-over)
-      (engine/draw-text {:text "G A M E  O V E R !"
-                         :position {:x (/ screen-width 2) :y (/ screen-height 2)}}))))
+    (.. (-> enemy :sprite :sprite) destroy))
+  (doseq [shot (get-in @context [:player :shots])]
+    (.. (:sprite shot) destroy))
+  (doseq [shot (:enemy-shot @context)]
+    (.. (:sprite shot) destroy)))
 
 (defn reset-game []
+  (clear-sprites)
   (swap! context assoc-in [:player :sprite :location] player-start-location)
   (swap! context update :asteroids
          (fn [asteroids]
@@ -854,7 +815,7 @@
   (swap! context assoc :next-wave-min-timer 8))
 
 (defn update* [delta]
-  (let [{:keys [state]} @context]
+  (let [{:keys [state player]} @context]
     (case state
       :title-screen
       (do
@@ -890,7 +851,9 @@
           (swap! context update-in [:player :lives-remaining] dec)
 
           (if (< (get-in @context [:player :lives-remaining]) 0)
-            (swap! context assoc :state :game-over)
+            (do
+              (set! (.. game-over-text -visible) true)
+              (swap! context assoc :state :game-over))
             (swap! context assoc :state :player-dead))))
 
       :player-dead
@@ -916,21 +879,22 @@
         (update-explosions delta)
 
         (when (>= (:player-death-timer @context) player-death-delay-time)
+          (set! (.. game-over-text -visible) false)
+          (set! (.. title-screen   -visible) true)
+          (set! (.. game-screen    -visible) false)
           (swap! context assoc :state :title-screen)))
 
-      nil)))
+      nil)
+
+    (when (#{:playing :player-dead :game-over} state)
+      (set! (.. score-text -text) (str "Score: " (:score player)))
+      (when (>= (:lives-remaining player) 0)
+        (set! (.. lives-text -text) (str "Ships Remaining: " (:lives-remaining player)))))))
 
 (defn sound [sound-name]
   (str "sounds/asteroid_belt_assault/" sound-name))
 
 (defn init []
-  #_(engine/init {:draw-fn   draw*
-                :update-fn update*
-                :show-fps? true})
-
-  #_(swap! context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
-  #_(swap! context assoc-in [:textures :sprite-sheet] (engine/load-texture (texture "sprite_sheet.png")))
-
   (make-star-field 200 {:x 0 :y 450 :w 2 :h 2} {:x 0 :y 30})
   (make-asteroids 10 {:x 0 :y 0 :w 50 :h 50} 20)
   (make-player {:x 0 :y 150 :w 50 :h 50} 3)
@@ -949,6 +913,11 @@
   (when-not (:initialized? @context)
     (.. root (addChild title-screen))
     (.. root (addChild game-screen))
+    (.. root (addChild game-over-text))
+
+    (.. game-screen (addChild score-text))
+    (.. game-screen (addChild lives-text))
+    (.. game-screen (addChild particle-container))
 
     (set! (.. game-screen -visible) false)
 
