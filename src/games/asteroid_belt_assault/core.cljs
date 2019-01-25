@@ -19,7 +19,7 @@
     container))
 
 (defn texture [tex-name]
-  (str "textures/asteroid_belt_assault/" tex-name))  
+  (str "textures/asteroid_belt_assault/" tex-name))
 
 (defonce root         (fullscreen-container))
 (defonce game-screen  (fullscreen-container))

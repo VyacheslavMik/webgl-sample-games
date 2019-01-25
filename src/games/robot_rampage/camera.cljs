@@ -9,6 +9,11 @@
           :view-port-height 600
           :world-rectangle {:x 0 :y 0 :width 1600 :height 1600}}))
 
+(defonce container (let [container (js/PIXI.Container.)]
+                     (set! (.. container -width) 800)
+                     (set! (.. container -height) 600)
+                     container))
+
 (defn position []
   (get-in @s/context [:camera :position]))
 
@@ -43,4 +48,9 @@
                   :y (u/clamp (+ (:y position) (:y offset))
                               (:y world-rectangle)
                               (- (:height world-rectangle) view-port-height))}]
+    (set! (.. container -pivot -x) (:x position))
+    (set! (.. container -pivot -y) (:y position))
     (swap! s/context assoc-in [:camera :position] position)))
+
+(defn add [sprite]
+  (.. container (addChild sprite)))

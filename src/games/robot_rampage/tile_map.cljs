@@ -25,31 +25,6 @@
             (tile-rect 64 32)
             (tile-rect 96 32)])
 
-(defn generate-random-map []
-  (let [wall-change-per-square 10
-        floor-tile (u/random-int floor-tile-start (inc floor-tile-end))
-        wall-tile (u/random-int wall-tile-start (inc wall-tile-end))]
-    (clj->js
-     (mapv (fn [x]
-             (mapv (fn [y]
-                     (cond
-                       (or (= x 0) (= y 0) (= x (dec map-width)) (= y (dec map-height)))
-                       wall-tile
-
-                       (or (= x 1) (= y 1) (= x (- map-width 2)) (= y (- map-height 2)))
-                       floor-tile
-
-                       (<= (rand-int 100) wall-change-per-square)
-                       wall-tile
-
-                       :else
-                       floor-tile))
-                   (range map-height)))
-           (range map-width)))))
-
-(defn init []
-  (swap! s/context assoc :map-squares (generate-random-map)))
-
 (defn get-square-by-pixel-x [pixel-x] (Math/floor (/ pixel-x tile-width)))
 (defn get-square-by-pixel-y [pixel-y] (Math/floor (/ pixel-y tile-height)))
 
@@ -132,3 +107,50 @@
            {:texture texture
             :position (square-screen-rectangle x y)
             :tex-coords (get tiles (get-tile-at-square x y))}))))))
+
+(def sprites (array))
+
+(defn get-sprite [x y]
+  (when-let [a (aget sprites x)]
+    (aget a y)))
+
+(defn set-sprite [x y sprite]
+  (when-not (aget sprites x)
+    (aset sprites x (array)))
+  (aset sprites x y sprite))
+
+(defn make-sprite [x y tile]
+  (when-let [sprite (get-sprite x y)]
+    (.. sprite destroy))
+  (let [sprite (u/pixi-sprite (get tiles tile) camera/container)
+        pos (square-screen-rectangle x y)]
+    (.. sprite -position (set (:x pos) (:y pos)))
+    (set-sprite x y sprite))
+  tile)
+
+(defn generate-random-map []
+  (let [wall-change-per-square 10
+        floor-tile (u/random-int floor-tile-start (inc floor-tile-end))
+        wall-tile (u/random-int wall-tile-start (inc wall-tile-end))]
+    (clj->js
+     (mapv (fn [x]
+             (mapv (fn [y]
+                     (make-sprite
+                      x y
+                      (cond
+                        (or (= x 0) (= y 0) (= x (dec map-width)) (= y (dec map-height)))
+                        wall-tile
+
+                        (or (= x 1) (= y 1) (= x (- map-width 2)) (= y (- map-height 2)))
+                        floor-tile
+
+                        (<= (rand-int 100) wall-change-per-square)
+                        wall-tile
+
+                        :else
+                        floor-tile)))
+                   (range map-height)))
+           (range map-width)))))
+
+(defn init []
+  (swap! s/context assoc :map-squares (generate-random-map)))

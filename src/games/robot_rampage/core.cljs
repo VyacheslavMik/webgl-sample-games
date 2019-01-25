@@ -1,6 +1,10 @@
 (ns games.robot-rampage.core
   (:require [games.engine :as engine]
+            [games.game :as game]
+            [games.pixi :as pixi]
+            [games.controls :as controls]
             [games.robot-rampage.storage :as s]
+            [games.robot-rampage.utils :as u]
             [games.robot-rampage.game-manager :as game-manager]
             [games.robot-rampage.camera :as camera]
             [games.robot-rampage.player :as player]
@@ -13,6 +17,9 @@
 
 (def wave-complete-delay 6)
 (def game-over-delay 6)
+
+(defonce root         (u/fullscreen-container))
+(defonce title-screen (u/fullscreen-sprite (u/texture "title_screen.png")))
 
 (defn draw* []
   (let [{:keys [textures state player] :as ctx} @s/context]
@@ -69,7 +76,9 @@
     (case state
       :title-screen
       (do
-        (when (or (engine/key-pressed? :Space) (engine/get-touch-state))
+        (when (or (controls/key-pressed? :Space) (controls/get-touch-state))
+          (set! (.. title-screen      -visible) false)
+          (set! (.. camera/container  -visible) true)
           (game-manager/start-new-game)
           (swap! s/context assoc :state :playing)))
 
@@ -101,22 +110,19 @@
 
       nil)))
 
-(defn texture [tex-name]
-  (str "textures/robot_rampage/" tex-name))
-
 (defn sound [sound-name]
   (str "sounds/robot_rampage/" sound-name))
 
 (defn init []
-  (engine/init {:draw-fn   draw*
+  #_(engine/init {:draw-fn   draw*
                 :update-fn update*})
 
   (swap! s/context assoc :state :title-screen)
   (swap! s/context assoc :wave-complete-timer 0)
   (swap! s/context assoc :game-over-timer 0)
 
-  (swap! s/context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
-  (swap! s/context assoc-in [:textures :sprite-sheet] (engine/load-texture (texture "sprite_sheet.png")))
+  #_(swap! s/context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
+  #_(swap! s/context assoc-in [:textures :sprite-sheet] (engine/load-texture (texture "sprite_sheet.png")))
 
   (swap! s/context assoc-in [:player-shot-sound] (sound "shot1.wav"))
 
@@ -132,4 +138,21 @@
   (tile-map/init)
   (goal-manager/init)
   (enemy-manager/init)
-  (game-manager/init))
+  (game-manager/init)
+
+  (when-not (:initialized? @s/context)
+    (.. root (addChild title-screen))
+    (.. root (addChild camera/container))
+    #_(.. root (addChild game-over-text))
+
+    ;; (.. game-screen (addChild score-text))
+    ;; (.. game-screen (addChild lives-text))
+    ;; (.. game-screen (addChild particle-container))
+
+    (set! (.. camera/container -visible) false)
+
+    (game/run (pixi/init
+               [(u/texture "title_screen.png")
+                (u/texture "sprite_sheet.png")]
+               #()) update* root)
+    (swap! s/context assoc :initialized? true)))
