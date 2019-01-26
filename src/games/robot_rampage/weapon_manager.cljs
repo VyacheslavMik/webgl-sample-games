@@ -46,8 +46,8 @@
                                         {:x 0 :y 0}
                                         400
                                         120
-                                        engine/color-white
-                                        engine/color-white)
+                                        [1 1 1 1]
+                                        [1 1 1 1])
                  (sprite/add-frame (update shot-rectangle :x + (:w shot-rectangle)))
                  (assoc :animate? false)
                  (sprite/set-frame frame)
@@ -161,6 +161,7 @@
                                        :collision-radius 14)
                                 (sprite/add-frame {:x 96 :y 128 :w 32 :h 32}))
                 powerups (conj powerups new-powerup)]
+            (sprite/update-pixi-sprite new-powerup)
             (swap! s/context assoc-in [:weapon-manager :powerups] powerups)
             (swap! s/context assoc-in [:weapon-manager :time-since-last-powerup] 0)))))))
 
@@ -188,6 +189,7 @@
                                        0 (reset! current-weapon-type :triple)
                                        1 (reset! current-weapon-type :rocket))
                                      (reset! weapon-time-remaining weapon-time-default)
+                                     (.. (:sprite powerup) destroy)
                                      false)
                                    true))))]
     (when @current-weapon-type
@@ -202,6 +204,12 @@
     (when (<= (get-in @s/context [:weapon-manager :weapon-time-remaining]) 0)
       (swap! s/context assoc-in [:weapon-manager :current-weapon-type] :normal))))
 
+(defn destroy [shot]
+  (when (:expired? shot)
+    (when-let [sprite (:sprite shot)]
+      (.. sprite  destroy)))
+  shot)
+
 (defn update* [elapsed]
   (swap! s/context update-in [:weapon-manager :shot-timer] + elapsed)
   (check-weapon-upgrade-expire elapsed)
@@ -212,15 +220,8 @@
                                (particle/update* elapsed)
                                (check-shot-wall-impacts)
                                (check-shot-enemy-impacts))))
-                   (remove :expired?)
+                   (remove (comp :expired? destroy))
                    (vec))]
     (swap! s/context assoc-in [:weapon-manager :shots] shots))
   (check-powerup-spawns elapsed)
   (check-powerup-pickups))
-
-(defn draw* []
-  (let [{:keys [powerups shots]} (:weapon-manager @s/context)]
-    (doseq [shot shots]
-      (particle/draw* shot))
-    (doseq [powerup powerups]
-      (sprite/draw* powerup))))

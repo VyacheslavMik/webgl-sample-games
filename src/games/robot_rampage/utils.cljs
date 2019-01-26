@@ -60,16 +60,12 @@
 (defn rectangle-offset [rectangle point]
   (vector-add rectangle point))
 
-(defn color-lerp [a b t]
-  (let [ar (goog.object/get a "r") ag (goog.object/get a "g")
-        ab (goog.object/get a "b") aa (goog.object/get a "a")
-        br (goog.object/get b "r") bg (goog.object/get b "g")
-        bb (goog.object/get b "b") ba (goog.object/get b "a")
-        t (max 0 (min t 1))]
-    #js {:r (+ ar (* (- br ar) t))
-         :g (+ ag (* (- bg ag) t))
-         :b (+ ab (* (- bb ab) t))
-         :a (+ aa (* (- ba aa) t))}))
+(defn color-lerp [[ar ag ab aa] [br bg bb ba] t]
+  (let [t (max 0 (min t 1))]
+    {:tint (js/PIXI.utils.rgb2hex #js[(+ ar (* (- br ar) t))
+                                      (+ ag (* (- bg ag) t))
+                                      (+ ab (* (- bb ab) t))])
+     :alpha (+ aa (* (- ba aa) t))}))
 
 (defn fullscreen-sprite [image]
   (let [sprite (js/PIXI.Sprite.
@@ -88,7 +84,7 @@
   (str "textures/robot_rampage/" tex-name))
 
 (defn pixi-sprite [frame-rect container & [center?]]
-  (let [texture (js/PIXI.Texture.fromImage (texture "sprite_sheet.png"))
+  (let [texture (js/PIXI.Texture.fromImage (texture "sprite_sheet.png") true  js/PIXI.SCALE_MODES.NEAREST)
         rect (js/PIXI.Rectangle. (:x frame-rect)
                                  (:y frame-rect)
                                  (:w frame-rect)
@@ -98,30 +94,3 @@
       (.. pixi-sprite -anchor (set 0.5)))
     (.. container (addChild pixi-sprite))
     pixi-sprite))
-
-(defn sprite-center [sprite]
-  {:x (+ (-> sprite :location :x) (/ (:frame-width sprite) 2))
-   :y (+ (-> sprite :location :y) (/ (:frame-height sprite) 2))})
-
-(defn update-pixi-sprite [sprite]
-  (when-let [pixi-sprite (:sprite sprite)]
-    (let [{:keys [x y]} (sprite-center sprite)
-          tex-coords (get-in sprite [:frames (:current-frame sprite)])
-          rect (when (or (not= (:x tex-coords) (.. pixi-sprite -texture -frame -x))
-                         (not= (:y tex-coords) (.. pixi-sprite -texture -frame -y))
-                         (not= (:w tex-coords) (.. pixi-sprite -texture -frame -width))
-                         (not= (:h tex-coords) (.. pixi-sprite -texture -frame -height)))
-                 (js/PIXI.Rectangle. (:x tex-coords)
-                                     (:y tex-coords)
-                                     (:w tex-coords)
-                                     (:h tex-coords)))]
-      (when-let [rotation (:rotation sprite)]
-        (set! (.. pixi-sprite -rotation) rotation))
-      (when-let [alpha (:alpha sprite)]
-        (set! (.. pixi-sprite -alpha) alpha))
-      (when rect
-        (set! (.. pixi-sprite -texture -orig) rect)
-        (set! (.. pixi-sprite -texture -frame) rect)
-        (.. pixi-sprite -texture (_updateUvs)))
-      (set! pixi-sprite -tint (:tint-color sprite))
-      (.. pixi-sprite -position (set x y)))))

@@ -1,1 +1,14 @@
-clojure -R:dev build.clj compile && cp resources/public/index.html docs && cp resources/public/editor.html docs && mkdir -p docs/js && mkdir -p docs/js/compiled && cp resources/public/js/gl-matrix-min.js docs/js && cp resources/public/js/path-finder.js docs/js && cp resources/public/js/compiled/main.js docs/js/compiled && mkdir -p docs/textures && cp -r resources/public/textures/* docs/textures/ && mkdir -p docs/sounds && cp -r resources/public/sounds/* docs/sounds/ && mkdir -p docs/maps && cp -r resources/public/maps/* docs/maps/
+clojure -R:dev build.clj compile && \
+cp resources/public/index.html docs && \
+cp resources/public/editor.html docs && \
+mkdir -p docs/js && \
+mkdir -p docs/js/compiled && \
+cp resources/public/js/pixi.min.js docs/js/ && \
+cp resources/public/js/path-finder.js docs/js && \
+cp resources/public/js/compiled/main.js docs/js/compiled && \
+mkdir -p docs/textures && \
+cp -r resources/public/textures/* docs/textures/ && \
+mkdir -p docs/sounds && \
+cp -r resources/public/sounds/* docs/sounds/ && \
+mkdir -p docs/maps && \
+cp -r resources/public/maps/* docs/maps/

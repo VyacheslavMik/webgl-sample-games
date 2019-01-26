@@ -4,6 +4,11 @@
             [games.robot-rampage.storage :as s]
             [games.robot-rampage.camera :as camera]))
 
+(defonce container (let [container (js/PIXI.Container.)]
+                     (set! (.. container -width) 800)
+                     (set! (.. container -height) 600)
+                     container))
+
 (def tile-width 32)
 (def tile-height 32)
 (def ^:export map-width 50)
@@ -90,24 +95,6 @@
   (wall-tile? (get-square-by-pixel-x (:x pixel-location))
               (get-square-by-pixel-y (:y pixel-location))))
 
-(defn draw* []
-  (let [texture (get-in @s/context [:textures :sprite-sheet])
-        {:keys [x y]} (camera/position)
-
-        start-x (get-square-by-pixel-x x)
-        end-x (get-square-by-pixel-x (+ x (camera/view-port-width)))
-
-        start-y (get-square-by-pixel-y y)
-        end-y (get-square-by-pixel-y (+ y (camera/view-port-height)))]
-    (doseq [x (range start-x (inc end-x))]
-      (doseq [y (range start-y (inc end-y))]
-        (when (and (>= x 0) (< x map-width)
-                   (>= y 0) (< y map-height))
-          (engine/draw-rectangle
-           {:texture texture
-            :position (square-screen-rectangle x y)
-            :tex-coords (get tiles (get-tile-at-square x y))}))))))
-
 (def sprites (array))
 
 (defn get-sprite [x y]
@@ -122,8 +109,8 @@
 (defn make-sprite [x y tile]
   (when-let [sprite (get-sprite x y)]
     (.. sprite destroy))
-  (let [sprite (u/pixi-sprite (get tiles tile) camera/container)
-        pos (square-screen-rectangle x y)]
+  (let [sprite (u/pixi-sprite (get tiles tile) container)
+        pos (square-world-rectangle x y)]
     (.. sprite -position (set (:x pos) (:y pos)))
     (set-sprite x y sprite))
   tile)
@@ -132,25 +119,23 @@
   (let [wall-change-per-square 10
         floor-tile (u/random-int floor-tile-start (inc floor-tile-end))
         wall-tile (u/random-int wall-tile-start (inc wall-tile-end))]
-    (clj->js
-     (mapv (fn [x]
-             (mapv (fn [y]
-                     (make-sprite
-                      x y
-                      (cond
-                        (or (= x 0) (= y 0) (= x (dec map-width)) (= y (dec map-height)))
-                        wall-tile
+    (swap! s/context assoc :map-squares 
+           (clj->js
+            (mapv (fn [x]
+                    (mapv (fn [y]
+                            (make-sprite
+                             x y
+                             (cond
+                               (or (= x 0) (= y 0) (= x (dec map-width)) (= y (dec map-height)))
+                               wall-tile
 
-                        (or (= x 1) (= y 1) (= x (- map-width 2)) (= y (- map-height 2)))
-                        floor-tile
+                               (or (= x 1) (= y 1) (= x (- map-width 2)) (= y (- map-height 2)))
+                               floor-tile
 
-                        (<= (rand-int 100) wall-change-per-square)
-                        wall-tile
+                               (<= (rand-int 100) wall-change-per-square)
+                               wall-tile
 
-                        :else
-                        floor-tile)))
-                   (range map-height)))
-           (range map-width)))))
-
-(defn init []
-  (swap! s/context assoc :map-squares (generate-random-map)))
+                               :else
+                               floor-tile)))
+                          (range map-height)))
+                  (range map-width))))))

@@ -9,6 +9,7 @@
             [games.robot-rampage.camera :as camera]
             [games.robot-rampage.player :as player]
             [games.robot-rampage.sprite :as sprite]
+            [games.robot-rampage.particle :as particle]
             [games.robot-rampage.effects-manager :as effects-manager]
             [games.robot-rampage.weapon-manager :as weapon-manager]
             [games.robot-rampage.enemy-manager :as enemy-manager]
@@ -21,41 +22,22 @@
 (defonce root         (u/fullscreen-container))
 (defonce title-screen (u/fullscreen-sprite (u/texture "title_screen.png")))
 
-(defn draw* []
-  (let [{:keys [textures state player] :as ctx} @s/context]
-    (when (= state :title-screen)
-      (engine/draw-rectangle
-       {:texture (:title-screen textures)
-        :size {:width 800 :height 600}}))
+(defn text [val {:keys [x y]} size visible? & [no-anchor?]]
+  (let [text (js/PIXI.Text. val
+                            #js{:fontFamily "Arial"
+                                :fontSize size
+                                :fill "white"})]
+    (.. text -position (set x y))
+    (when-not no-anchor?
+      (.. text -anchor (set 0.5)))
+    (set! (.. text -visible) visible?)
+    text))
 
-    (when (#{:playing :wave-complete :game-over} state)
-      (tile-map/draw*)
-      (weapon-manager/draw*)
-      (enemy-manager/draw*)
-      (effects-manager/draw*)
-      (goal-manager/draw*)
-      (player/draw*)
-
-      (engine/draw-text {:text (str "Score: " (get-in @s/context [:game-manager :score]))
-                         :align :start
-                         :position {:x 30 :y 10}})
-      (engine/draw-text {:text (str "Terminals Remaining: " (get-in @s/context [:goal-manager :active-count]))
-                         :align :start
-                         :position {:x 520 :y 10}})
-      (when (>= (get-in @s/context [:player :lives-remaining]) 0)
-        (engine/draw-text {:text (str "Lives Remaining: " (get-in @s/context [:player :lives-remaining]))
-                           :align :start
-                           :position {:x 30 :y 25}})))
-
-    (when (= state :wave-complete)
-      (engine/draw-text {:text (str "Beginning Wave " (inc (get-in @s/context [:game-manager :current-wave])))
-                         :scale 4
-                         :position {:x 400 :y 300}}))
-
-    (when (= state :game-over)
-      (engine/draw-text {:text "G A M E  O V E R !"
-                         :scale 5
-                         :position {:x 400 :y 300}}))))
+(defonce game-over-text (text "G A M E  O V E R !"     {:x 400 :y 300} 36 false))
+(defonce score-text     (text "Score: 0"               {:x 30  :y 5}   16 false true))
+(defonce terminals-text (text "Terminals Remaining: 0" {:x 520 :y 5}   16 false true))
+(defonce lives-text     (text "Lives Remaining: 0"     {:x 30  :y 20}  16 false true))
+(defonce wave-text      (text "Beginning Wave 0"       {:x 400 :y 300} 28 false))
 
 (defn check-player-death []
   (let [base-sprite (get-in @s/context [:player :base-sprite])
@@ -67,7 +49,9 @@
     (when player-destroyed?
       (swap! s/context update-in [:player :lives-remaining] dec)
       (if (= (get-in @s/context [:player :lives-remaining]) 0)
-        (swap! s/context assoc :state :game-over)
+        (do
+          (set! (.. game-over-text -visible) true)
+          (swap! s/context assoc :state :game-over))
         (game-manager/start-current-wave)))))
 
 (defn update* [delta]
@@ -79,6 +63,9 @@
         (when (or (controls/key-pressed? :Space) (controls/get-touch-state))
           (set! (.. title-screen      -visible) false)
           (set! (.. camera/container  -visible) true)
+          (set! (.. lives-text -visible) true)
+          (set! (.. score-text -visible) true)
+          (set! (.. terminals-text -visible) true)
           (game-manager/start-new-game)
           (swap! s/context assoc :state :playing)))
 
@@ -91,12 +78,18 @@
         (goal-manager/update*    elapsed)
         (check-player-death)
         (when (= (get-in @s/context [:goal-manager :active-count]) 0)
-          (swap! s/context assoc :state :wave-complete)))
+          (set! (.. wave-text -text) (str "Beginning Wave " (inc (get-in @s/context [:game-manager :current-wave]))))
+          (set! (.. wave-text -visible) true)
+          (swap! s/context assoc :state :wave-complete))
+        (set! (.. score-text -text) (str "Score: " (get-in @s/context [:game-manager :score])))
+        (set! (.. lives-text -text) (str "Lives Remaining: " (get-in @s/context [:player :lives-remaining])))
+        (set! (.. terminals-text -text) (str "Terminals Remaining: " (get-in @s/context [:goal-manager :active-count]))))
 
       :wave-complete
       (do
         (swap! s/context update :wave-complete-timer + elapsed)
         (when (> (:wave-complete-timer @s/context) wave-complete-delay)
+          (set! (.. wave-text -visible) false)
           (game-manager/start-new-wave)
           (swap! s/context assoc :state :playing)
           (swap! s/context assoc :wave-complete-timer 0)))
@@ -105,6 +98,12 @@
       (do
         (swap! s/context update :game-over-timer + elapsed)
         (when (> (:game-over-timer @s/context) game-over-delay)
+          (set! (.. game-over-text -visible) false)
+          (set! (.. camera/container -visible) false)
+          (set! (.. title-screen -visible) true)
+          (set! (.. lives-text -visible) false)
+          (set! (.. score-text -visible) false)
+          (set! (.. terminals-text -visible) false)
           (swap! s/context assoc :state :title-screen)
           (swap! s/context assoc :game-over-timer 0)))
 
@@ -114,15 +113,9 @@
   (str "sounds/robot_rampage/" sound-name))
 
 (defn init []
-  #_(engine/init {:draw-fn   draw*
-                :update-fn update*})
-
   (swap! s/context assoc :state :title-screen)
   (swap! s/context assoc :wave-complete-timer 0)
   (swap! s/context assoc :game-over-timer 0)
-
-  #_(swap! s/context assoc-in [:textures :title-screen] (engine/load-texture (texture "title_screen.png")))
-  #_(swap! s/context assoc-in [:textures :sprite-sheet] (engine/load-texture (texture "sprite_sheet.png")))
 
   (swap! s/context assoc-in [:player-shot-sound] (sound "shot1.wav"))
 
@@ -131,25 +124,28 @@
   (swap! s/context assoc-in [:explosion-sounds] (mapv (fn [i] (sound (str "explosion" i ".wav")))
                                                       (range 1 5)))
 
-  (player/init)
-  (effects-manager/init)
-  (weapon-manager/init)
-  (camera/init)
-  (tile-map/init)
-  (goal-manager/init)
-  (enemy-manager/init)
-  (game-manager/init)
-
   (when-not (:initialized? @s/context)
     (.. root (addChild title-screen))
     (.. root (addChild camera/container))
-    #_(.. root (addChild game-over-text))
+    (.. camera/container (addChild tile-map/container))
+    (.. camera/container (addChild camera/screen))
+    (.. camera/container (addChild particle/container))
 
-    ;; (.. game-screen (addChild score-text))
-    ;; (.. game-screen (addChild lives-text))
-    ;; (.. game-screen (addChild particle-container))
+    (.. root (addChild game-over-text))
+    (.. root (addChild score-text))
+    (.. root (addChild lives-text))
+    (.. root (addChild terminals-text))
+    (.. root (addChild wave-text))
 
     (set! (.. camera/container -visible) false)
+
+    (player/init)
+    (effects-manager/init)
+    (weapon-manager/init)
+    (camera/init)
+    (goal-manager/init)
+    (enemy-manager/init)
+    (game-manager/init)
 
     (game/run (pixi/init
                [(u/texture "title_screen.png")

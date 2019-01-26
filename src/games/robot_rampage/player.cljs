@@ -1,5 +1,5 @@
 (ns games.robot-rampage.player
-  (:require [games.engine :as engine]
+  (:require [games.controls :as controls]
             [games.robot-rampage.storage :as s]
             [games.robot-rampage.utils :as u]
             [games.robot-rampage.camera :as camera]
@@ -53,17 +53,17 @@
 
 (defn handle-keyboard-movement []
   (cond-> {:x 0 :y 0}
-    (engine/key-pressed? :KeyW) (update :y dec)
-    (engine/key-pressed? :KeyA) (update :x dec)
-    (engine/key-pressed? :KeyS) (update :y inc)
-    (engine/key-pressed? :KeyD) (update :x inc)))
+    (controls/key-pressed? :KeyW) (update :y dec)
+    (controls/key-pressed? :KeyA) (update :x dec)
+    (controls/key-pressed? :KeyS) (update :y inc)
+    (controls/key-pressed? :KeyD) (update :x inc)))
 
 (defn handle-mouse-shots [player]
-  (if-let [mouse-state (engine/get-mouse-state)]
+  (if-let [mouse-state (controls/get-mouse-state)]
     (let [screen-location (sprite/screen-location (:turret-sprite player))
           mouse-loc {:x (:x mouse-state) :y (:y mouse-state)}]
       (u/vector-sub mouse-loc screen-location))
-    (if-let [touch-state (first (engine/get-touch-state))]
+    (if-let [touch-state (first (controls/get-touch-state))]
       (let [screen-location (sprite/screen-location (:turret-sprite player))
             touch-loc {:x (:x touch-state) :y (:y touch-state)}]
         (u/vector-sub touch-loc screen-location))
@@ -186,9 +186,5 @@
                    (update :base-sprite sprite/update* elapsed)
                    (clamp-to-world)
                    (update-turret-sprite))]
-    (swap! s/context assoc :player player)))
-
-(defn draw* []
-  (let [player (:player @s/context)]
-    (sprite/draw* (:base-sprite player))
-    (sprite/draw* (:turret-sprite player))))
+    (swap! s/context assoc :player player))
+  (sprite/update-pixi-sprite (-> @s/context :player :turret-sprite)))

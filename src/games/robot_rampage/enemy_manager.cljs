@@ -24,13 +24,12 @@
            acc (transient [])]
       (if (< i c)
         (let [enemy (enemy/update* (nth enemies i) elapsed)]
+          (when (:destroyed? enemy)
+            (.. (-> enemy :enemy-base :sprite)  destroy)
+            (.. (-> enemy :enemy-claws :sprite) destroy))
           (recur (inc i) (if (:destroyed? enemy) acc (conj! acc enemy))))
         (persistent! acc)))))
 
 (defn update* [elapsed]
   (let [enemies (update-enemies (:enemies @s/context) elapsed)]
     (swap! s/context assoc :enemies enemies)))
-
-(defn draw* []
-  (doseq [enemy (:enemies @s/context)]
-    (enemy/draw* enemy)))

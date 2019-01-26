@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <link rel="shortcut icon" href="#" />
     <meta charset="UTF-8">
     <style>
       html {
@@ -19,7 +20,7 @@
       margin: 0;
       }
 
-      #container {
+      #pixi {
       position: relative;
       }
 
@@ -186,7 +187,7 @@
       margin-bottom: 20px;
       }
 
-      #games div, a {
+      #games a {
       cursor: pointer;
       margin-left: 10px;
       margin-right: 10px;
@@ -195,7 +196,7 @@
       color: #808080;
       }
 
-      #games div:hover, a:hover {
+      #games a:hover {
       color: black;
       }
 
@@ -252,10 +253,7 @@
       </div>
       <div id="middle">
 	<div id="tiles"></div>
-	<div id="container">
-	  <canvas id="glCanvas" width="800" height="600"></canvas>
-	  <canvas id="textCanvas" width="800" height="600" tabindex="1"></canvas>
-	</div>
+	<div id="pixi"></div>
       </div>
       <input type="range" min="0" max="1600" value="0" class="slider" id="bottom-range"
 	     oninput="games.gemstone_hunter.editor.change_position(event)">
@@ -289,6 +287,7 @@
       </div>
     </div>
     <script src="js/gl-matrix-min.js" type="text/javascript"></script>
+    <script src="js/pixi.min.js" type="text/javascript"></script>
     <script src="js/path-finder.js" type="text/javascript"></script>
     <script src="js/compiled/main.js" type="text/javascript"></script>
   </body>

@@ -2,6 +2,15 @@
   (:require [games.robot-rampage.storage :as s]
             [games.robot-rampage.utils :as u]))
 
+(defonce container (let [container (js/PIXI.Container.)]
+                     (set! (.. container -width) 800)
+                     (set! (.. container -height) 600)
+                     container))
+(defonce screen (let [container (js/PIXI.Container.)]
+                  (set! (.. container -width) 800)
+                  (set! (.. container -height) 600)
+                  container))
+
 (defn init []
   (swap! s/context assoc :camera
          {:position {:x 0 :y 0}
@@ -9,16 +18,16 @@
           :view-port-height 600
           :world-rectangle {:x 0 :y 0 :width 1600 :height 1600}}))
 
-(defonce container (let [container (js/PIXI.Container.)]
-                     (set! (.. container -width) 800)
-                     (set! (.. container -height) 600)
-                     container))
-
 (defn position []
   (get-in @s/context [:camera :position]))
 
 (defn transform-point [point]
   (u/vector-sub point (position)))
+
+(defn set-position [pos]
+  (set! (.. container -pivot -x) (:x pos))
+  (set! (.. container -pivot -y) (:y pos))
+  (swap! s/context assoc-in [:camera :position] pos))
 
 (defn transform-rectangle [rectangle]
   (-> rectangle
@@ -48,9 +57,6 @@
                   :y (u/clamp (+ (:y position) (:y offset))
                               (:y world-rectangle)
                               (- (:height world-rectangle) view-port-height))}]
-    (set! (.. container -pivot -x) (:x position))
-    (set! (.. container -pivot -y) (:y position))
+    (set! (.. container -pivot -x) (Math/floor (:x position)))
+    (set! (.. container -pivot -y) (Math/floor (:y position)))
     (swap! s/context assoc-in [:camera :position] position)))
-
-(defn add [sprite]
-  (.. container (addChild sprite)))

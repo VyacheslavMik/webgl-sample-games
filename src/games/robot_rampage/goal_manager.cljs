@@ -73,6 +73,9 @@
                 (swap! s/context update-in [:goal-manager :active-count] inc)))))))))
 
 (defn generate-computers [computer-count]
+  (doseq [terminal (-> @s/context :goal-manager :computer-terminals)]
+    (.. (-> terminal :active-sprite   :sprite) destroy)
+    (.. (-> terminal :inactive-sprite :sprite) destroy))
   (swap! s/context assoc-in [:goal-manager :computer-terminals] [])
   (loop []
     (when (< (get-in @s/context [:goal-manager :active-count]) computer-count)
@@ -85,7 +88,3 @@
                        (mapv (fn [terminal]
                                (computer-terminal/update* terminal elapsed))))]
     (swap! s/context assoc-in [:goal-manager :computer-terminals] terminals)))
-
-(defn draw* []
-  (doseq [terminal (get-in @s/context [:goal-manager :computer-terminals])]
-    (computer-terminal/draw* terminal)))

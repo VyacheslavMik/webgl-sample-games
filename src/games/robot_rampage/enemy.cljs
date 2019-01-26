@@ -52,12 +52,8 @@
           enemy-claws (-> (:enemy-claws enemy)
                           (assoc :world-location (:world-location enemy-base))
                           (sprite/rotate-to direction-to-player))]
+      (sprite/update-pixi-sprite enemy-claws)
       (assoc enemy
              :enemy-base enemy-base
              :current-target-square current-target-square
              :enemy-claws enemy-claws))))
-
-(defn draw* [enemy]
-  (when-not (:destroyed? enemy)
-    (sprite/draw* (:enemy-base enemy))
-    (sprite/draw* (:enemy-claws enemy))))

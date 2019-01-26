@@ -24,7 +24,7 @@
              :frame-time 0.1
              :time-for-current-frame 0
 
-             :tint-color engine/color-white
+             :tint-color 0xFFFFFF
 
              :rotation 0
 
@@ -59,15 +59,42 @@
                           yp :bounding-y-padding}]
   {:x (+ x xp) :y (+ y yp) :width (- w (* xp 2)) :height (- h (* yp 2))})
 
-(defn new-sprite [world-location initial-frame velocity]
-  (let [texture (get-in @s/context [:textures :sprite-sheet])]
-    (assoc sprite
-           :world-location world-location
-           :texture texture
-           :velocity velocity
-           :frames [initial-frame]
-           :frame-width (:w initial-frame)
-           :frame-height (:h initial-frame))))
+(defn update-pixi-sprite [sprite]
+  (when-let [pixi-sprite (:sprite sprite)]
+    (let [{:keys [x y]} (world-center sprite)
+          tex-coords (get-in sprite [:frames (:current-frame sprite)])
+          rect (when (or (not= (:x tex-coords) (.. pixi-sprite -texture -frame -x))
+                         (not= (:y tex-coords) (.. pixi-sprite -texture -frame -y))
+                         (not= (:w tex-coords) (.. pixi-sprite -texture -frame -width))
+                         (not= (:h tex-coords) (.. pixi-sprite -texture -frame -height)))
+                 (js/PIXI.Rectangle. (:x tex-coords)
+                                     (:y tex-coords)
+                                     (:w tex-coords)
+                                     (:h tex-coords)))]
+      (when-let [rotation (:rotation sprite)]
+        (set! (.. pixi-sprite -rotation) rotation))
+      (when-let [alpha (:alpha sprite)]
+        (set! (.. pixi-sprite -alpha) alpha))
+      (when rect
+        (set! (.. pixi-sprite -texture -orig) rect)
+        (set! (.. pixi-sprite -texture -frame) rect)
+        (.. pixi-sprite -texture (_updateUvs)))
+      (set! pixi-sprite -tint (:tint-color sprite))
+      (.. pixi-sprite -position (set x y))))
+  sprite)
+
+(defn new-sprite [world-location initial-frame velocity & [container]]
+  (update-pixi-sprite (assoc sprite
+                             :world-location world-location
+                             :sprite (u/pixi-sprite initial-frame
+                                                    (if container
+                                                      container
+                                                      camera/screen)
+                                                    true)
+                             :velocity velocity
+                             :frames [initial-frame]
+                             :frame-width (:w initial-frame)
+                             :frame-height (:h initial-frame))))
 
 (defn colliding? [sprite other-box]
   (and (:collidable? sprite)
@@ -99,20 +126,10 @@
   (assoc sprite :current-frame (u/clamp frame 0 (-> sprite :frames count dec))))
 
 (defn update* [sprite elapsed]
+  (update-pixi-sprite sprite)
   (if-not (:expired? sprite)
     (-> sprite
         (update :time-for-current-frame + elapsed)
         (animate)
         (update :world-location u/vector-add (u/vector-mul (:velocity sprite) elapsed)))
     sprite))
-
-(defn draw* [sprite]
-  (when (and (not (:expired? sprite))
-             (camera/object-visible? (world-rectangle sprite)))
-    (engine/draw-rectangle (cond-> {:texture (:texture sprite)
-                                    :origin (screen-center sprite)
-                                    :color (:tint-color sprite)
-                                    :tex-coords (get (:frames sprite) (:current-frame sprite))}
-                             (and (:rotation sprite) (not= (:rotation sprite) 0))
-                             (assoc :effect {:type :rotate
-                                             :radians (:rotation sprite)})))))

@@ -1,11 +1,10 @@
 (ns games.robot-rampage.effects-manager
-  (:require [games.engine :as engine]
-            [games.robot-rampage.storage :as s]
+  (:require [games.robot-rampage.storage :as s]
             [games.robot-rampage.particle :as particle]
             [games.robot-rampage.utils :as u]))
 
-(def color-yellow (engine/rgb-color [255 255 0 255]))
-(def color-orange (engine/rgb-color [255 165 0 255]))
+(def color-yellow [1 1                  0 1])
+(def color-orange [1 0.6470588235294118 0 1])
 
 (defn init []
   (let [particle-frame {:x 0 :y 288 :w 2 :h 2}
@@ -102,8 +101,8 @@
                   4
                   6
                   90
-                  (engine/color [1.0 0.3 0 0.5])
-                  (engine/color [1.0 0.3 0 0]))))
+                  [1.0 0.3 0 0.5]
+                  [1.0 0.3 0 0])))
 
 (defn add-larget-explosion [location]
   (add-explosion location
@@ -114,8 +113,8 @@
                  6
                  30
                  90
-                 (engine/color [1.0 0.3 0 0.5])
-                 (engine/color [1.0 0.3 0 0])))
+                 [1.0 0.3 0 0.5]
+                 [1.0 0.3 0 0]))
 
 (defn update-effects [effects elapsed]
   (let [c (count effects)]
@@ -130,7 +129,3 @@
   (let [effects (get-in @s/context [:effects-manager :effects])
         effects (update-effects effects elapsed)]
     (swap! s/context assoc-in [:effects-manager :effects] effects)))
-
-(defn draw* []
-  (doseq [effect (get-in @s/context [:effects-manager :effects])]
-    (particle/draw* effect)))

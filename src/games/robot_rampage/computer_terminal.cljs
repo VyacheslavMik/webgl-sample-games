@@ -35,15 +35,11 @@
     terminal))
 
 (defn update* [terminal elapsed]
+  (set! (.. (-> terminal :active-sprite   :sprite) -visible)      (:active? terminal))
+  (set! (.. (-> terminal :inactive-sprite :sprite) -visible) (not (:active? terminal)))
   (if (:active? terminal)
     (-> terminal
         (update :last-spawn-counter + elapsed)
         (try-spawn-enemy)
         (update :active-sprite sprite/update* elapsed))
     (update terminal :inactive-sprite sprite/update* elapsed)))
-
-(defn draw* [terminal]
-  (if (:active? terminal)
-    (sprite/draw* (:active-sprite terminal))
-    (sprite/draw* (:inactive-sprite terminal))))
-     
